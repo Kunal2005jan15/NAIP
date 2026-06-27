@@ -1,0 +1,62 @@
+# =============================================================
+# NAIP Project - .gitignore
+# =============================================================
+
+# ---- Secrets / API keys — NEVER commit these ----
+data/secrets/
+*.key
+.env
+
+# ---- Large raw data files (regenerate via scripts instead of storing) ----
+data/raw/*.csv
+data/raw/*.xls
+data/raw/*.xlsx
+data/raw/*.zip
+data/raw/weather_all_districts.csv
+data/raw/weather_current_2020_2026.csv
+data/raw/weather_current_2020_2026_CLEAN.csv
+data/raw/weather_current_PARTIAL.csv
+
+# Keep raw folder structure tracked even if files are ignored
+!data/raw/.gitkeep
+
+# ---- Large processed data files ----
+data/processed/*.csv
+!data/processed/.gitkeep
+
+# ---- Trained models (large binary files, regenerate via training scripts) ----
+outputs/models/*.pkl
+outputs/models/*.json
+
+# ---- Snapshots (these accumulate over time, don't bloat the repo) ----
+data/snapshots/*.csv
+!data/snapshots/.gitkeep
+
+# ---- Python environment / cache ----
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+*.egg-info/
+
+# ---- Conda / venv ----
+.conda/
+venv/
+env/
+
+# ---- OS-specific junk ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- VS Code ----
+.vscode/
+
+# ---- Streamlit ----
+.streamlit/secrets.toml
+
+# ---- Logs ----
+*.log
+
+# ---- Large plots/outputs you regenerate, not author by hand (optional - comment out if you want these tracked) ----
+# outputs/plots/*.png
