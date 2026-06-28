@@ -9,18 +9,26 @@
 #   Irrigation green : #3D6B5C (positive / healthy yield)
 #   Alert terracotta : #A33B2E (drought / flood / risk)
 #
-# Three modes:
-#   1. Historical Results — map + click-through of the locked
-#      2018-19 test set predictions (validated against ground truth)
-#   2. Current Season Outlook — REAL 2026 weather (NASA POWER,
-#      live-fetched) combined with last-known (2019) yield baseline.
-#      Honestly labeled: weather is live, yield trend is not.
-#   3. Scenario Explorer — pick any historical district/crop/year,
-#      apply manual what-if rainfall/temperature sliders.
+# v2 — rebuilt as a real prediction tool, not a simulation:
+#   1. Districts Requiring Attention (District Watch) — HOMEPAGE,
+#      zero clicks: every district's outlook is already computed
+#      and ranked by genuine change since the last check.
+#   2. Kharif 2026 Early Warning — NEW capability, honestly scoped
+#      as a risk CLASSIFICATION (not a yield prediction), using
+#      real monsoon-so-far data vs. each district's own history.
+#   3. Current Season Outlook — REAL 2026 weather (NASA POWER),
+#      now with a REAL calibrated 80% interval (quantile models),
+#      replacing point-only estimates and manual sliders as the
+#      default uncertainty view.
+#   4. Historical Results — locked 2018-19 test-set predictions,
+#      validated against ground truth. Kept as proof the model works.
+#   5. Scenario Explorer — DEMOTED to Advanced/Testing. Manual
+#      what-if sliders on historical years; explicitly labeled as
+#      not a forecast.
 #
-# All three modes share a rule-based Advisory panel (NOT model-
-# generated) that translates SHAP/RAI/interval outputs into
-# process-level actions an officer already has authority over.
+# All tabs share a rule-based Advisory panel (NOT model-generated)
+# that translates SHAP/RAI/interval outputs into process-level
+# actions an officer already has authority over.
 # =============================================================
 
 import streamlit as st
@@ -289,6 +297,163 @@ html, body, [class*="css"]  {
 footer {visibility: hidden;}
 header {visibility: hidden;}
 div[data-testid="stRadio"] > label { display: none; }
+
+/* =================================================================
+   FORCED TEXT/BACKGROUND CONTRAST FIXES
+   Streamlit's own theme defaults can silently override our custom
+   styling, causing text to render in low-contrast gray or even
+   white-on-white depending on the user's system theme. Every
+   native widget below gets an EXPLICIT color so visibility never
+   depends on Streamlit's internal defaults.
+   ================================================================= */
+
+/* Root-level override: force our palette everywhere, no exceptions */
+.stApp, .stApp * {
+    color: var(--ink) !important;
+}
+
+/* Headings/text inside markdown blocks */
+.stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span {
+    color: var(--ink) !important;
+}
+
+/* Radio buttons (mode toggle, crop selector) */
+div[data-testid="stRadio"] label,
+div[data-testid="stRadio"] label span,
+div[data-testid="stRadio"] label p {
+    color: var(--ink) !important;
+    font-weight: 600 !important;
+}
+div[data-testid="stRadio"] label[data-baseweb="radio"] > div:first-child {
+    border-color: var(--soil) !important;
+}
+
+/* Selectboxes (state/district/crop/year dropdowns) */
+div[data-testid="stSelectbox"] label {
+    color: var(--ink-soft) !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+}
+div[data-baseweb="select"] {
+    background-color: #FFFFFF !important;
+}
+div[data-baseweb="select"] > div {
+    background-color: #FFFFFF !important;
+    color: var(--ink) !important;
+    border-color: var(--line) !important;
+}
+div[data-baseweb="select"] span {
+    color: var(--ink) !important;
+}
+/* Dropdown menu (the popover list of options) */
+ul[role="listbox"] {
+    background-color: #FFFFFF !important;
+}
+ul[role="listbox"] li {
+    color: var(--ink) !important;
+    background-color: #FFFFFF !important;
+}
+ul[role="listbox"] li:hover {
+    background-color: var(--wheat-pale) !important;
+}
+
+/* Sliders (rainfall/temperature what-if) */
+div[data-testid="stSlider"] label {
+    color: var(--ink-soft) !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+}
+div[data-testid="stSlider"] div[data-baseweb="slider"] {
+    color: var(--wheat-dark) !important;
+}
+div[data-testid="stSliderTickBarMin"],
+div[data-testid="stSliderTickBarMax"] {
+    color: var(--ink-soft) !important;
+}
+/* The little floating value bubble above the slider handle */
+div[data-testid="stThumbValue"] {
+    color: #FFFFFF !important;
+    background-color: var(--ink) !important;
+}
+
+/* Captions (helper text under sliders, map instructions) */
+.stCaption, [data-testid="stCaptionContainer"], small {
+    color: var(--ink-soft) !important;
+    opacity: 1 !important;
+}
+
+/* Expander (Live Context section) */
+div[data-testid="stExpander"] {
+    background-color: #FFFFFF !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 6px !important;
+}
+div[data-testid="stExpander"] summary {
+    color: var(--ink) !important;
+    font-weight: 600 !important;
+    background-color: #FFFFFF !important;
+}
+div[data-testid="stExpander"] summary:hover {
+    color: var(--wheat-dark) !important;
+}
+div[data-testid="stExpander"] p,
+div[data-testid="stExpander"] span,
+div[data-testid="stExpander"] li {
+    color: var(--ink) !important;
+}
+div[data-testid="stExpander"] a {
+    color: var(--green) !important;
+    text-decoration: underline !important;
+}
+
+/* Links anywhere in markdown */
+.stMarkdown a {
+    color: var(--green) !important;
+    text-decoration: underline !important;
+}
+
+/* Info/warning boxes (st.info, st.warning, st.caption fallbacks) */
+div[data-testid="stAlert"] {
+    background-color: var(--paper-deep) !important;
+}
+div[data-testid="stAlert"] p {
+    color: var(--ink) !important;
+}
+
+/* Code blocks (e.g. in empty-state messages) */
+code {
+    color: var(--alert) !important;
+    background-color: var(--wheat-pale) !important;
+    padding: 2px 5px !important;
+    border-radius: 3px !important;
+}
+
+/* Ensure our own custom boxes ALWAYS keep their intended text
+   color even with the global override above (which uses !important
+   on everything) - these re-assert color AFTER the global rule
+   because they appear later in the stylesheet */
+.naip-stat-number { color: var(--ink) !important; }
+.naip-stat-label { color: var(--soil) !important; }
+.naip-stat-sub { color: var(--green) !important; }
+.naip-alert-title { color: var(--alert) !important; }
+.naip-safe-title { color: var(--green) !important; }
+.naip-scenario-title { color: var(--wheat-dark) !important; }
+.naip-alert, .naip-alert *  { color: var(--ink) !important; }
+.naip-safe, .naip-safe * { color: var(--ink) !important; }
+.naip-scenario, .naip-scenario * { color: var(--ink) !important; }
+.naip-title { color: var(--ink) !important; }
+.naip-title span { color: var(--wheat-dark) !important; }
+.naip-subtitle { color: var(--soil) !important; }
+.naip-masthead-tag { color: var(--ink-soft) !important; }
+.naip-eyebrow { color: var(--wheat-dark) !important; }
+.naip-panel-district { color: var(--ink) !important; }
+.naip-panel-state { color: var(--soil) !important; }
+.naip-meta { color: var(--ink-soft) !important; }
+.naip-mode-banner { color: var(--ink-soft) !important; }
+.naip-legend { color: var(--ink-soft) !important; }
+.naip-empty-text { color: var(--soil) !important; }
+.shap-label { color: var(--ink) !important; }
+.shap-value { color: var(--soil) !important; }
 </style>
 """
 
@@ -465,6 +630,36 @@ def load_current_predictions():
         return pd.read_csv(path)
     return None
 
+@st.cache_data
+def load_district_watch():
+    path = 'outputs/metrics/district_watch_feed.csv'
+    if os.path.exists(path):
+        return pd.read_csv(path)
+    return None
+
+@st.cache_data
+def load_kharif_risk():
+    path = 'data/processed/kharif_2026_risk_flags.csv'
+    if os.path.exists(path):
+        return pd.read_csv(path)
+    return None
+
+@st.cache_resource
+def load_quantile_models():
+    """
+    Loads the REAL trained quantile-regression models (10th / 90th
+    percentile) that produce the dashboard's published 80% interval
+    coverage (86.6%). Used to give the Current Season Outlook a real
+    calibrated range instead of a single point number - this is what
+    replaces the old manual what-if sliders as the default uncertainty
+    view, per the honest-prediction-model rework.
+    """
+    with open('outputs/models/xgb_lower.pkl', 'rb') as f:
+        lower = pickle.load(f)
+    with open('outputs/models/xgb_upper.pkl', 'rb') as f:
+        upper = pickle.load(f)
+    return lower, upper
+
 @st.cache_resource
 def load_model_and_shap():
     with open('outputs/models/xgb_tuned.pkl', 'rb') as f:
@@ -477,6 +672,26 @@ def load_model_and_shap():
 test_preds = load_test_predictions()
 model, FEATURES, explainer = load_model_and_shap()
 current_preds = load_current_predictions()
+district_watch = load_district_watch()
+kharif_risk = load_kharif_risk()
+xgb_lower_model, xgb_upper_model = load_quantile_models()
+
+# Real calibrated 80% interval for the current 2026 outlook (replaces
+# point-only estimates with an actual probabilistic range, using the
+# SAME quantile models that produced the dashboard's published 86.6%
+# coverage figure - not an arbitrary slider-driven number).
+if current_preds is not None:
+    X_current_all = current_preds[FEATURES].astype(float)
+    current_preds['pred_lower_2026'] = xgb_lower_model.predict(X_current_all)
+    current_preds['pred_upper_2026'] = xgb_upper_model.predict(X_current_all)
+
+# Official IMD 2026 Southwest Monsoon outlook - verified live via RAG
+# (script 31), reported as context wherever Kharif risk is discussed.
+# A NATIONAL figure (district-level IMD sub-forecasts aren't available
+# via the RAG layer for all 118 districts) - stated explicitly.
+IMD_2026_LPA_PCT = 90
+IMD_DEFICIENT_PROB_PCT = 60
+IMD_VERIFIED_DATE = "2026-05-29"
 
 # NOTE: test_predictions_FINAL.csv already contains lat/lon —
 # do NOT re-merge coordinates here (caused lat_x/lat_y bug previously).
@@ -525,22 +740,228 @@ st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
 # MODE TOGGLE
 # ---------------------------------------------------------------
 
-mode = st.radio(
-    "Mode",
-    ["📊 Historical Results (2018–19 test set)",
-     "🌤️ Current Season Outlook (2026, real weather)",
-     "🔮 Scenario Explorer (any year, manual what-if)"],
-    horizontal=True,
-    label_visibility="collapsed",
-)
-
-st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
+tab_watch, tab_kharif, tab_current, tab_hist, tab_scenario = st.tabs([
+    "🚨 Districts Requiring Attention",
+    "🌱 Kharif 2026 Early Warning",
+    "🌤️ Current Season Outlook",
+    "📊 Historical Results",
+    "🔮 Scenario Explorer (Advanced)",
+])
 
 # =================================================================
-# MODE 1 — HISTORICAL RESULTS
+# TAB 1 — DISTRICTS REQUIRING ATTENTION (District Watch) — HOMEPAGE
+# =================================================================
+# This is the first tab an officer sees, with zero clicks required.
+# Every district's latest 2026 outlook is already computed and
+# ranked by genuine change since the last check - not a map to
+# explore, a prioritized list you're handed.
 # =================================================================
 
-if mode.startswith("📊"):
+with tab_watch:
+    if district_watch is None or len(district_watch) == 0:
+        empty_state("🚨", "District Watch has not been run yet.<br>Run <code>src/28_district_watch.py</code> first.")
+    else:
+        st.markdown("""
+            <div class="naip-mode-banner">
+                This is the default view because it needs no input: every district's latest 2026 outlook is
+                automatically compared against its previous check. <b>Districts are ranked by how much has
+                genuinely changed</b> &mdash; not by raw severity alone &mdash; so a long-standing drought that
+                hasn't worsened ranks below a district that just started deteriorating.
+            </div>
+        """, unsafe_allow_html=True)
+
+        level_counts = district_watch['alert_level'].value_counts()
+        n_urgent = int(level_counts.get('urgent', 0))
+        n_watch = int(level_counts.get('watch', 0))
+        n_new = int(level_counts.get('new', 0))
+        n_stable = int(level_counts.get('stable', 0) + level_counts.get('elevated_stable', 0) + level_counts.get('baseline', 0))
+
+        wstat_cols = st.columns(4)
+        wstats = [
+            (f"{n_urgent}", "Urgent", "Large shift since last check &mdash; review first"),
+            (f"{n_watch}", "Watch", "Meaningful change, not yet urgent"),
+            (f"{n_new}", "New", "No prior snapshot to compare against"),
+            (f"{n_stable}", "Stable", "No significant change since last check"),
+        ]
+        for col, (num, label, sub) in zip(wstat_cols, wstats):
+            col.markdown(f"""
+                <div class="naip-card">
+                    <div class="naip-stat-number">{num}</div>
+                    <div class="naip-stat-label">{label}</div>
+                    <div class="naip-stat-sub">{sub}</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
+
+        level_filter = st.multiselect(
+            "Show alert levels",
+            ["urgent", "watch", "new", "elevated_stable", "stable", "baseline"],
+            default=["urgent", "watch", "new"],
+            key="watch_level_filter",
+        )
+
+        feed = district_watch[district_watch['alert_level'].isin(level_filter)].copy()
+        alert_order = {'urgent': 0, 'watch': 1, 'new': 2, 'elevated_stable': 3, 'stable': 4, 'baseline': 5}
+        feed['_sort'] = feed['alert_level'].map(alert_order)
+        feed = feed.sort_values(['_sort', 'rai_severity_relative'], ascending=[True, False])
+
+        WATCH_BADGE = {
+            'urgent':           ('naip-alert',    'naip-alert-title',    '⚠ Urgent'),
+            'watch':            ('naip-scenario', 'naip-scenario-title', '◐ Watch'),
+            'new':              ('naip-scenario', 'naip-scenario-title', '● New'),
+            'elevated_stable':  ('naip-scenario', 'naip-scenario-title', '◐ Elevated, stable'),
+            'stable':           ('naip-safe',     'naip-safe-title',     '✓ Stable'),
+            'baseline':         ('naip-safe',     'naip-safe-title',     '✓ Baseline'),
+        }
+
+        list_col, detail_col = st.columns([1.3, 1])
+
+        with list_col:
+            st.markdown('<div class="naip-eyebrow">Ranked Alert Feed</div>', unsafe_allow_html=True)
+            if len(feed) == 0:
+                empty_state("✓", "No districts match the selected filter.")
+            else:
+                for _, r in feed.iterrows():
+                    box_class, title_class, icon_title = WATCH_BADGE.get(r['alert_level'], WATCH_BADGE['stable'])
+                    st.markdown(f"""
+                        <div class="{box_class}" style="margin-bottom:8px;">
+                            <span class="{title_class}">{icon_title} &mdash; {r['district']} ({r['state']}), {r['crop']}</span>
+                            {r['change_note']}
+                        </div>
+                    """, unsafe_allow_html=True)
+
+        with detail_col:
+            st.markdown('<div class="naip-eyebrow">Inspect a District</div>', unsafe_allow_html=True)
+            if len(feed) == 0:
+                empty_state("🚨", "No districts in the current filter to inspect.")
+            else:
+                pick_options = [f"{r['district']} — {r['crop']}" for _, r in feed.iterrows()]
+                picked = st.selectbox("District", pick_options, key="watch_detail_pick", label_visibility="collapsed")
+                picked_district, picked_crop = picked.rsplit(" — ", 1)
+                wrow_match = feed[(feed['district'] == picked_district) & (feed['crop'] == picked_crop)]
+
+                if len(wrow_match) > 0:
+                    wrow = wrow_match.iloc[0]
+
+                    st.markdown(f"""
+                        <div class="naip-panel-state">{wrow['state']}</div>
+                        <div class="naip-panel-district">{wrow['district']}</div>
+                    """, unsafe_allow_html=True)
+                    st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
+
+                    box_class, title_class, icon_title = WATCH_BADGE.get(wrow['alert_level'], WATCH_BADGE['stable'])
+                    st.markdown(f"""
+                        <div class="{box_class}"><span class="{title_class}">{icon_title}</span>{wrow['change_note']}</div>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown(f"""
+                        <div class="naip-card">
+                            <div class="naip-stat-number">{wrow['current_pred_yield']:,.0f} <span style="font-size:1rem; color:var(--soil); font-weight:500;">kg/ha</span></div>
+                            <div class="naip-stat-label">Latest 2026 Outlook &mdash; {wrow['crop']}</div>
+                            <div class="naip-stat-sub">Rainfall anomaly severity (vs. this district's own history): {wrow['rai_severity_relative']:.2f}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    st.caption("In plain terms: this score measures how unusual this season's rainfall anomaly is "
+                               "compared to what's normal for THIS district specifically — not a fixed national scale.")
+
+                    shap_cols_w = [c for c in wrow.index if c.startswith('shap_')]
+                    if shap_cols_w:
+                        st.markdown('<div class="naip-eyebrow">Why this outlook</div>', unsafe_allow_html=True)
+                        shap_df_w = pd.DataFrame({
+                            'feature': [c.replace('shap_', '') for c in shap_cols_w],
+                            'shap_value': wrow[shap_cols_w].astype(float).values
+                        })
+                        shap_df_w['abs_val'] = shap_df_w['shap_value'].abs()
+                        shap_df_w = shap_df_w.sort_values('abs_val', ascending=False).head(6)
+                        render_shap_bars(shap_df_w, shap_df_w['abs_val'].max())
+
+                    st.markdown('<div class="naip-eyebrow" style="margin-top:18px;">Recommended Actions</div>', unsafe_allow_html=True)
+                    render_advisory(generate_advisory(
+                        wrow, wrow['current_pred_yield'] * 0.85, wrow['current_pred_yield'] * 1.15, wrow['current_pred_yield']
+                    ))
+
+                    alert_type_w = 'drought' if wrow.get('drought_flag', 0) == 1 else 'flood' if wrow.get('flood_flag', 0) == 1 else 'general'
+                    render_live_context(wrow['state'], wrow['district'], wrow['crop'], alert_type_w)
+                else:
+                    empty_state("🚨", "No data found for that selection.")
+
+# =================================================================
+# TAB 2 — KHARIF 2026 EARLY WARNING (new capability)
+# =================================================================
+# HONEST SCOPE: this is a RISK CLASSIFICATION, not a yield
+# prediction. The Kharif/Rice season is still in progress and a
+# yield number now would be overclaiming. What this CAN honestly
+# say: based on real rainfall recorded so far compared to each
+# district's own history, plus the official IMD national outlook
+# (reported separately as context, not blended into the number),
+# here is which districts are most exposed to risk right now.
+# =================================================================
+
+with tab_kharif:
+    if kharif_risk is None or len(kharif_risk) == 0:
+        empty_state("🌱", "Kharif early-warning data not found.<br>Run <code>src/32_kharif_early_warning.py</code> first.")
+    else:
+        st.markdown(f"""
+            <div class="naip-mode-banner">
+                <b>This is a RISK CLASSIFICATION, not a yield prediction.</b> Full Kharif/Rice yield for 2026 can
+                only be known once the season completes (around October) &mdash; predicting it now would be
+                overclaiming. What this honestly shows: each district's real rainfall so far this season, compared
+                to that SAME calendar window in its own 2020&ndash;2025 history. For context (not blended into the
+                number below): IMD's official national outlook is {IMD_2026_LPA_PCT}% of the Long Period Average,
+                with a {IMD_DEFICIENT_PROB_PCT}% chance of a deficient season nationally (IMD, verified {IMD_VERIFIED_DATE}).
+            </div>
+        """, unsafe_allow_html=True)
+
+        krisk_counts = kharif_risk['kharif_risk_level'].value_counts()
+        kstat_cols = st.columns(4)
+        kstats = [
+            (f"{int(krisk_counts.get('high', 0))}", "High Risk", "Tracking well below normal for this point in season"),
+            (f"{int(krisk_counts.get('moderate', 0))}", "Moderate Risk", "Somewhat below normal so far"),
+            (f"{int(krisk_counts.get('low', 0))}", "Low Risk", "Tracking near or above normal"),
+            (f"{int(krisk_counts.get('insufficient_data', 0))}", "Insufficient Data", "Fewer than 3 years of history available"),
+        ]
+        for col, (num, label, sub) in zip(kstat_cols, kstats):
+            col.markdown(f"""
+                <div class="naip-card">
+                    <div class="naip-stat-number">{num}</div>
+                    <div class="naip-stat-label">{label}</div>
+                    <div class="naip-stat-sub">{sub}</div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
+
+        krisk_filter = st.multiselect(
+            "Show risk levels", ["high", "moderate", "low", "insufficient_data"],
+            default=["high", "moderate"], key="kharif_level_filter",
+        )
+        kfeed = kharif_risk[kharif_risk['kharif_risk_level'].isin(krisk_filter)].sort_values('kharif_risk_zscore')
+
+        KHARIF_BADGE = {
+            'high':              ('naip-alert',    'naip-alert-title',    '⚠ High Risk'),
+            'moderate':          ('naip-scenario', 'naip-scenario-title', '◐ Moderate Risk'),
+            'low':               ('naip-safe',     'naip-safe-title',     '✓ Low Risk'),
+            'insufficient_data': ('naip-scenario', 'naip-scenario-title', '? Insufficient Data'),
+        }
+
+        if len(kfeed) == 0:
+            empty_state("🌱", "No districts match the selected filter.")
+        else:
+            for _, kr in kfeed.iterrows():
+                box_class, title_class, icon_title = KHARIF_BADGE.get(kr['kharif_risk_level'], KHARIF_BADGE['moderate'])
+                st.markdown(f"""
+                    <div class="{box_class}" style="margin-bottom:8px;">
+                        <span class="{title_class}">{icon_title} &mdash; {kr['district']} ({kr['state']})</span>
+                        {kr['risk_explanation']}
+                    </div>
+                """, unsafe_allow_html=True)
+
+# =================================================================
+# TAB 4 — HISTORICAL RESULTS (kept as proof the model works)
+# =================================================================
+
+with tab_hist:
 
     st.markdown("""
         <div class="naip-mode-banner">
@@ -640,7 +1061,11 @@ if mode.startswith("📊"):
 # MODE 2 — CURRENT SEASON OUTLOOK (real 2026 weather)
 # =================================================================
 
-elif mode.startswith("🌤️"):
+# =================================================================
+# TAB 3 — CURRENT SEASON OUTLOOK (real 2026 weather, real interval)
+# =================================================================
+
+with tab_current:
 
     if current_preds is None:
         empty_state("🌤️", "Current-season predictions have not been generated yet.<br>Run <code>src/27_generate_current_predictions.py</code> first.")
@@ -700,7 +1125,8 @@ elif mode.startswith("🌤️"):
             for _, r in current_preds.dropna(subset=['lat', 'lon']).iterrows():
                 folium.CircleMarker(
                     location=[r['lat'], r['lon']], radius=7, tooltip=r['district'],
-                    popup=f"<b>{r['district']}</b><br>2026 outlook: {r['current_pred_yield']:.0f} kg/ha<br>vs 2019: {r['change_vs_2019']:+.0f}",
+                    popup=f"<b>{r['district']}</b><br>2026 outlook: {r['current_pred_yield']:.0f} kg/ha "
+                          f"({r['pred_lower_2026']:.0f}&ndash;{r['pred_upper_2026']:.0f})<br>vs 2019: {r['change_vs_2019']:+.0f}",
                     color='#2B2417', weight=1, fill=True, fill_color=get_color_current(r), fill_opacity=0.85,
                 ).add_to(cm)
 
@@ -734,9 +1160,13 @@ elif mode.startswith("🌤️"):
                         <div class="naip-card">
                             <div class="naip-stat-number">{crow['current_pred_yield']:,.0f} <span style="font-size:1rem; color:var(--soil); font-weight:500;">kg/ha</span></div>
                             <div class="naip-stat-label">2026 Wheat Outlook</div>
-                            <div class="naip-stat-sub">vs. 2019 actual: {crow['change_vs_2019']:+,.0f} kg/ha</div>
+                            <div class="naip-stat-sub">80% prediction interval: {crow['pred_lower_2026']:,.0f} &ndash; {crow['pred_upper_2026']:,.0f} kg/ha</div>
+                            <div class="naip-stat-sub" style="color: var(--soil);">vs. 2019 actual: {crow['change_vs_2019']:+,.0f} kg/ha</div>
                         </div>
                     """, unsafe_allow_html=True)
+                    st.caption(f"In plain terms: based on the model's track record, this district's actual 2026 wheat "
+                               f"yield is more likely than not to fall between {crow['pred_lower_2026']:,.0f} and "
+                               f"{crow['pred_upper_2026']:,.0f} kg/ha &mdash; a real calibrated range, not a single guess.")
 
                     st.markdown('<div class="naip-eyebrow">Why this outlook</div>', unsafe_allow_html=True)
                     shap_cols = [c for c in crow.index if c.startswith('shap_')]
@@ -753,15 +1183,23 @@ elif mode.startswith("🌤️"):
                 empty_state("🌤️", "Click any district marker to see its<br>2026 wheat outlook and explanation.")
 
 # =================================================================
-# MODE 3 — SCENARIO EXPLORER (manual what-if on historical years)
+# TAB 5 — SCENARIO EXPLORER (Advanced / Testing — demoted)
+# =================================================================
+# Kept for development/demo flexibility, but explicitly demoted:
+# this is a manual what-if tool on HISTORICAL years, not a forecast.
+# For real forward-looking estimates use the Current Season Outlook
+# (real 2026 weather) or Kharif 2026 Early Warning (real
+# monsoon-so-far data) tabs instead.
 # =================================================================
 
-else:
+with tab_scenario:
     st.markdown("""
         <div class="naip-mode-banner">
-            Explore any district, crop, and historical year, and apply manual rainfall or temperature adjustments
-            to see how the prediction responds. Uses recorded historical weather as the baseline — this is a
-            what-if tool, not a forecast.
+            <b>Advanced / testing tool &mdash; not a forecast.</b> Explore any district, crop, and historical year,
+            and apply manual rainfall or temperature adjustments to see how the model responds. Uses recorded
+            historical weather as the baseline. For real forward-looking estimates, use the
+            <b>Current Season Outlook</b> (real 2026 weather, calibrated range) or
+            <b>Kharif 2026 Early Warning</b> (real monsoon-so-far data) tabs instead.
         </div>
     """, unsafe_allow_html=True)
 
