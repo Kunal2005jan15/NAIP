@@ -96,7 +96,19 @@ else:
         if abs(yield_chg) > YIELD_WATCH_THRESHOLD or abs(sev_chg) > SEVERITY_CHANGE_THRESHOLD:
             direction = "improved" if yield_chg > 0 else "declined"
             return 'watch', f"Yield estimate {direction} {yield_chg:+.0f} kg/ha since last check."
-        return 'stable', "No significant change since last check."
+
+        # BUG FIX (2026-06-29): everything between the no_real_change
+        # floor (5 kg/ha) and the watch threshold (150 kg/ha) used to
+        # fall through silently to 'stable' - conflating TRUE zero
+        # change with real, moderate, just-not-alert-worthy change.
+        # Caught by the automated sanity gate (script 33): a District
+        # Watch run showed 98% 'stable' while the underlying
+        # yield_change_since_last had real variance (std=51.5,
+        # range=245.3) - exactly because many districts were landing
+        # in this unlabeled gap, not because of a calculation error.
+        # 'stable' now means what it says: genuinely no change.
+        direction = "up" if yield_chg > 0 else "down"
+        return 'minor_change', f"Minor change since last check ({yield_chg:+.0f} kg/ha, below alert threshold)."
 
     diff[['alert_level', 'change_note']] = diff.apply(lambda r: pd.Series(classify_alert(r)), axis=1)
 

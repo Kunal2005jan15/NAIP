@@ -464,34 +464,50 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # ---------------------------------------------------------------
 
 FRIENDLY_NAMES = {
-    'lag_yield_1': "Last year's yield",
-    'rolling_yield_3yr': "3-year average yield",
-    'time_trend': "Long-term productivity trend",
-    'lag_yield_2': "Yield 2 years ago",
-    'lag_yield_3': "Yield 3 years ago",
-    'nasa_rainfall_rabi': "Winter season rainfall",
-    'nasa_rainfall_kharif': "Monsoon season rainfall",
-    'nasa_rainfall_annual': "Annual rainfall",
-    'nasa_temp_max_rabi': "Winter max temperature",
-    'nasa_temp_max_kharif': "Monsoon max temperature",
-    'nasa_temp_avg_rabi': "Winter avg temperature",
-    'nasa_temp_avg_kharif': "Monsoon avg temperature",
-    'nasa_humidity_kharif': "Monsoon humidity",
-    'nasa_solar_annual': "Solar radiation",
-    'rainfall_anomaly_index': "Rainfall anomaly (RAI)",
-    'fertilizer_per_ha': "Fertilizer use intensity",
-    'nitrogen_per_ha': "Nitrogen use intensity",
-    'irrigation_pct': "Irrigation coverage",
-    'log_area': "Area sown",
-    'state_encoded': "State-level baseline",
-    'crop_encoded': "Crop type",
-    'season_encoded': "Season",
-    'frost_risk_days': "Frost risk days",
-    'heat_stress_days': "Heat stress days",
-    'yield_gap_vs_state': "Yield gap vs. state average",
-    'yield_trend': "Recent yield trend",
-    'drought_flag': "Drought flag",
-    'flood_flag': "Flood flag",
+    # Autoregressive features - explicitly labeled with data vintage
+    # so the "Why this outlook" panel is honest about what it's using
+    'lag_yield_1':        "Last published yield (2019)",
+    'rolling_yield_3yr':  "3-year average yield (up to 2019)",
+    'time_trend':         "Long-run productivity trend",
+    'lag_yield_2':        "Yield 2 seasons ago (2018)",
+    'lag_yield_3':        "Yield 3 seasons ago (2017)",
+    'yield_trend':        "Recent yield direction",
+    'yield_gap_vs_state': "Gap vs. state average",
+    # Live weather features - these ARE current-season data
+    'nasa_rainfall_rabi':     "This season's winter rainfall (live)",
+    'nasa_rainfall_kharif':   "This season's monsoon rainfall (live)",
+    'nasa_rainfall_annual':   "Annual rainfall (live)",
+    'nasa_temp_max_rabi':     "Peak winter temperature (live)",
+    'nasa_temp_max_kharif':   "Peak monsoon temperature (live)",
+    'nasa_temp_avg_rabi':     "Average winter temperature (live)",
+    'nasa_temp_avg_kharif':   "Average monsoon temperature (live)",
+    'nasa_humidity_kharif':   "Monsoon humidity (live)",
+    'nasa_solar_annual':      "Solar radiation",
+    'rainfall_anomaly_index': "Rainfall vs. district's own history",
+    'heat_stress_days':       "Days above 35°C",
+    'frost_risk_days':        "Frost-risk days",
+    'drought_flag':           "Drought flag",
+    'flood_flag':             "Flood flag",
+    # Agronomic features (new, computed from daily weather)
+    'gdd_kharif':             "Monsoon growing degree days (live)",
+    'gdd_rabi':               "Winter growing degree days (live)",
+    'max_dry_streak_kharif':  "Longest dry spell in monsoon (live)",
+    'max_dry_streak_rabi':    "Longest dry spell in winter (live)",
+    'rainfall_cv_kharif':     "Monsoon rainfall consistency (live)",
+    'rainfall_cv_rabi':       "Winter rainfall consistency (live)",
+    'water_balance_kharif':   "Net water balance, monsoon (live)",
+    'water_balance_rabi':     "Net water balance, winter (live)",
+    # NDVI satellite vegetation
+    'ndvi_kharif':            "Monsoon crop health — satellite (live)",
+    'ndvi_rabi':              "Winter crop health — satellite (live)",
+    # Management / structural
+    'fertilizer_per_ha': "Fertiliser use",
+    'nitrogen_per_ha':   "Nitrogen use",
+    'irrigation_pct':    "Irrigation coverage",
+    'log_area':          "Area sown",
+    'state_encoded':     "State-level baseline",
+    'crop_encoded':      "Crop type",
+    'season_encoded':    "Season",
 }
 
 # ---------------------------------------------------------------
@@ -505,22 +521,55 @@ def generate_advisory(row, pred_lower, pred_upper, pred_mid):
     yield_gap = row.get('yield_gap_vs_state', 0)
     interval_width = pred_upper - pred_lower
     interval_width_pct = (interval_width / pred_mid * 100) if pred_mid > 0 else 0
+    crop = row.get('crop', 'crop')
+    district = row.get('district', 'this district')
+    state = row.get('state', 'the state')
 
     if drought:
-        advisories.append({'level': 'alert', 'title': 'Drought Relief Review',
-            'text': 'Rainfall anomaly indicates a significant deficit this season. Recommend flagging this district for drought relief scheme eligibility review and water-conservation irrigation advisories.'})
+        advisories.append({'level': 'alert', 'title': 'Drought Conditions Detected',
+            'text': (
+                f"{district} is showing a significant rainfall deficit this season compared to its own historical average. "
+                f"Recommended actions: (1) Check eligibility for central drought relief funds under NDRF/SDRF norms. "
+                f"(2) Issue water-conservation advisories to farmers &mdash; prioritise micro-irrigation for standing crops. "
+                f"(3) Coordinate with the state agriculture department on contingency crop plans if deficit continues."
+            )})
+
     if flood:
-        advisories.append({'level': 'alert', 'title': 'Flood Damage Assessment',
-            'text': 'Rainfall anomaly indicates significant excess this season. Recommend flood damage assessment and cross-checking crop insurance claim windows.'})
+        advisories.append({'level': 'alert', 'title': 'Excess Rainfall / Flood Risk',
+            'text': (
+                f"{district} is recording significantly above-normal rainfall this season. "
+                f"Recommended actions: (1) Conduct rapid crop damage surveys in low-lying areas. "
+                f"(2) Ensure farmers are aware of the crop insurance claim window &mdash; most policies require "
+                f"notification within 72 hours of damage. (3) Coordinate drainage relief with the irrigation department."
+            )})
+
     if interval_width_pct > 28:
-        advisories.append({'level': 'caution', 'title': 'High Prediction Uncertainty',
-            'text': f'This prediction has a wider-than-typical interval ({interval_width:.0f} kg/ha range). Recommend field-level verification before finalizing procurement or insurance estimates.'})
+        advisories.append({'level': 'caution', 'title': 'Verify Before Acting on This Number',
+            'text': (
+                f"The model is less certain than usual about {district}'s yield this season &mdash; the range of likely "
+                f"outcomes is wider than normal. This typically happens when current weather conditions are unusual "
+                f"compared to the historical pattern this district is benchmarked against. "
+                f"Before using this figure for procurement targets, insurance estimates, or PDS planning, "
+                f"cross-check with a field-level crop-cutting experiment (CCE) or block-level officer report."
+            )})
+
     if pd.notna(yield_gap) and yield_gap < -400:
-        advisories.append({'level': 'caution', 'title': 'Below State Average',
-            'text': f'This district is trending {abs(yield_gap):.0f} kg/ha below the state average. May warrant review of input access or extension service coverage.'})
+        gap_pct = abs(yield_gap) / (pred_mid - yield_gap) * 100 if pred_mid > 0 else 0
+        advisories.append({'level': 'caution', 'title': 'Consistently Below State Average',
+            'text': (
+                f"{district} is predicted to yield roughly {abs(yield_gap):,.0f} kg/ha below the {state} average "
+                f"({gap_pct:.0f}% lower). This gap has persisted across multiple seasons, suggesting a structural "
+                f"issue rather than a one-off weather event. Recommended review areas: fertiliser and seed access "
+                f"at the farm level, irrigation infrastructure coverage, and whether extension service visits are "
+                f"reaching the most affected blocks."
+            )})
+
     if not advisories:
-        advisories.append({'level': 'normal', 'title': 'No Flags Raised',
-            'text': 'No drought, flood, or significant deviation flags for this district-year. Standard monitoring applies.'})
+        advisories.append({'level': 'normal', 'title': 'No Flags This Season',
+            'text': (
+                f"{district} does not show any drought, flood, or significant yield-gap flags for this season. "
+                f"Standard monitoring applies. The yield outlook is within normal historical range for this district."
+            )})
     return advisories
 
 
@@ -538,13 +587,6 @@ def render_advisory(advisories):
 
 
 def render_live_context(state, district, crop, alert_type):
-    """
-    Renders an expandable 'Live Context' section using the RAG
-    module (src/rag_grounding_31.py). Pulls live government
-    relief scheme, MSP, and IMD forecast info via Tavily search.
-    Degrades silently (shows a caption, never crashes) if the
-    module or API key is unavailable.
-    """
     import sys
     src_path = os.path.join(os.path.dirname(__file__), '..', 'src')
     if src_path not in sys.path:
@@ -553,19 +595,34 @@ def render_live_context(state, district, crop, alert_type):
     try:
         from rag_grounding_31 import get_live_grounding
     except ImportError:
-        st.caption("Live context module not found (src/rag_grounding_31.py missing).")
-        return
+        return  # silently skip - module not present
 
     with st.expander("🌐 Live Context — government schemes, MSP, weather outlook"):
         try:
             result = get_live_grounding(state, district, crop, alert_type=alert_type)
-        except Exception as e:
-            st.caption(f"Live grounding failed: {e}")
+        except Exception:
+            st.markdown("""
+                <div class="naip-scenario">
+                    <span class="naip-scenario-title">Live context not available</span>
+                    The live government scheme and MSP lookup couldn't connect right now.
+                    This doesn't affect the yield prediction or alerts above &mdash; those use
+                    locally stored model data. Try again after a few minutes, or check your
+                    internet connection.
+                </div>
+            """, unsafe_allow_html=True)
             return
 
         if not result.get('available'):
-            st.caption(f"Live grounding unavailable: {result.get('reason', 'unknown reason')}")
-            st.caption("To enable: set TAVILY_API_KEY or save a key to data/secrets/tavily_key.txt")
+            st.markdown(f"""
+                <div class="naip-scenario">
+                    <span class="naip-scenario-title">Live context not configured</span>
+                    This section pulls real-time information on government relief schemes, Minimum
+                    Support Prices (MSP), and IMD weather forecasts specific to this district and
+                    crop. To enable it, a Tavily API key needs to be configured by the system
+                    administrator &mdash; contact your NAIP support team. The yield predictions and
+                    district alerts above are unaffected.
+                </div>
+            """, unsafe_allow_html=True)
             return
 
         for section in result['sections']:
@@ -714,16 +771,16 @@ st.markdown("""
 # TOP-LEVEL STATS ROW
 # ---------------------------------------------------------------
 
-n_districts = test_preds['district'].nunique()
-avg_yield = test_preds['pred_yield'].mean()
-model_r2 = 0.8644
+n_districts = current_preds['district'].nunique() if current_preds is not None else 118
+avg_yield_current = current_preds['current_pred_yield'].mean() if current_preds is not None else 0
+model_r2 = 0.8702  # walk-forward validated; single test-split 2018-19
 
 stat_cols = st.columns(4)
 stats = [
     (f"{n_districts}", "Districts Monitored", "118 across UP &middot; Punjab &middot; Haryana"),
-    (f"{avg_yield:,.0f}", "Avg. Predicted Yield (kg/ha)", "Wheat &amp; Rice, 2018&ndash;19 test set"),
-    (f"{model_r2:.3f}", "Model R&sup2; (Test Set)", "Time-correct validation, 2018&ndash;19"),
-    ("86.6%", "Interval Coverage", "Target band: 70&ndash;90%"),
+    (f"{avg_yield_current:,.0f}", "Avg. 2026 Wheat Outlook (kg/ha)", "Live model, real 2026 NASA weather"),
+    (f"{model_r2:.3f}", "Model R&sup2;", "Walk-forward validated &middot; range 0.21&ndash;0.93"),
+    ("81.1%", "Interval Coverage", "80% prediction band &middot; target 70&ndash;90%"),
 ]
 for col, (num, label, sub) in zip(stat_cols, stats):
     col.markdown(f"""
@@ -740,12 +797,13 @@ st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
 # MODE TOGGLE
 # ---------------------------------------------------------------
 
-tab_watch, tab_kharif, tab_current, tab_hist, tab_scenario = st.tabs([
+tab_watch, tab_kharif, tab_current, tab_hist, tab_scenario, tab_about = st.tabs([
     "🚨 Districts Requiring Attention",
     "🌱 Kharif 2026 Early Warning",
     "🌤️ Current Season Outlook",
     "📊 Historical Results",
-    "🔮 Scenario Explorer (Advanced)",
+    "🔮 Scenario Explorer",
+    "ℹ️ About",
 ])
 
 # =================================================================
@@ -761,12 +819,17 @@ with tab_watch:
     if district_watch is None or len(district_watch) == 0:
         empty_state("🚨", "District Watch has not been run yet.<br>Run <code>src/28_district_watch.py</code> first.")
     else:
-        st.markdown("""
+        st.markdown(f"""
             <div class="naip-mode-banner">
                 This is the default view because it needs no input: every district's latest 2026 outlook is
                 automatically compared against its previous check. <b>Districts are ranked by how much has
                 genuinely changed</b> &mdash; not by raw severity alone &mdash; so a long-standing drought that
-                hasn't worsened ranks below a district that just started deteriorating.
+                hasn't worsened ranks below a district that just started deteriorating.<br><br>
+                <b>Note on crops shown:</b> Currently displaying <b>Wheat (Rabi) only</b>. This is because Wheat's
+                2025&ndash;26 season has completed and real weather data exists for the full growing period. Rice
+                (Kharif) 2026 predictions will appear here automatically once the monsoon season completes
+                (~October 2026) and the model has a full season of weather to work from &mdash; predicting Rice
+                yields mid-season would be overclaiming.
             </div>
         """, unsafe_allow_html=True)
 
@@ -774,14 +837,16 @@ with tab_watch:
         n_urgent = int(level_counts.get('urgent', 0))
         n_watch = int(level_counts.get('watch', 0))
         n_new = int(level_counts.get('new', 0))
+        n_minor = int(level_counts.get('minor_change', 0))
         n_stable = int(level_counts.get('stable', 0) + level_counts.get('elevated_stable', 0) + level_counts.get('baseline', 0))
 
-        wstat_cols = st.columns(4)
+        wstat_cols = st.columns(5)
         wstats = [
             (f"{n_urgent}", "Urgent", "Large shift since last check &mdash; review first"),
             (f"{n_watch}", "Watch", "Meaningful change, not yet urgent"),
+            (f"{n_minor}", "Minor change", "Real but small shift, below alert threshold"),
             (f"{n_new}", "New", "No prior snapshot to compare against"),
-            (f"{n_stable}", "Stable", "No significant change since last check"),
+            (f"{n_stable}", "Stable", "Genuinely no change since last check"),
         ]
         for col, (num, label, sub) in zip(wstat_cols, wstats):
             col.markdown(f"""
@@ -796,13 +861,13 @@ with tab_watch:
 
         level_filter = st.multiselect(
             "Show alert levels",
-            ["urgent", "watch", "new", "elevated_stable", "stable", "baseline"],
+            ["urgent", "watch", "minor_change", "new", "elevated_stable", "stable", "baseline"],
             default=["urgent", "watch", "new"],
             key="watch_level_filter",
         )
 
         feed = district_watch[district_watch['alert_level'].isin(level_filter)].copy()
-        alert_order = {'urgent': 0, 'watch': 1, 'new': 2, 'elevated_stable': 3, 'stable': 4, 'baseline': 5}
+        alert_order = {'urgent': 0, 'watch': 1, 'new': 2, 'elevated_stable': 3, 'minor_change': 4, 'stable': 5, 'baseline': 6}
         feed['_sort'] = feed['alert_level'].map(alert_order)
         feed = feed.sort_values(['_sort', 'rai_severity_relative'], ascending=[True, False])
 
@@ -811,6 +876,7 @@ with tab_watch:
             'watch':            ('naip-scenario', 'naip-scenario-title', '◐ Watch'),
             'new':              ('naip-scenario', 'naip-scenario-title', '● New'),
             'elevated_stable':  ('naip-scenario', 'naip-scenario-title', '◐ Elevated, stable'),
+            'minor_change':     ('naip-safe',     'naip-safe-title',     '· Minor change'),
             'stable':           ('naip-safe',     'naip-safe-title',     '✓ Stable'),
             'baseline':         ('naip-safe',     'naip-safe-title',     '✓ Baseline'),
         }
@@ -899,17 +965,33 @@ with tab_watch:
 # =================================================================
 
 with tab_kharif:
+    from datetime import date
+    current_month = date.today().month
+    # Kharif (monsoon) season: June-October → focus on Kharif risk
+    # Rabi (winter) season: November-March → focus on Rabi outlook
+    # April-May: inter-season, prompt user to check District Watch for Rabi results
+    if current_month in range(6, 11):
+        season_label = "Kharif (Monsoon) 2026"
+        season_note = "The <b>Kharif (monsoon/rice) season is currently in progress</b>. The risk classification below is based on real rainfall recorded so far this season compared to each district's own history. Full yield prediction will be available once the season completes (~October)."
+    elif current_month in [11, 12] or current_month in range(1, 4):
+        season_label = "Rabi (Winter) Season Active"
+        season_note = "The <b>Rabi (winter/wheat) season is currently in progress</b>. Check the <b>Current Season Outlook</b> tab for live district-level wheat predictions based on real NASA weather data. Kharif 2026 results will appear in <b>Historical Results</b> once the government publishes them (~2027)."
+    else:
+        season_label = "Inter-Season Period"
+        season_note = "This is the inter-season period (April–May). Rabi (wheat) harvest results are being compiled; Kharif (rice) sowing begins in June. Check <b>Districts Requiring Attention</b> for the latest Wheat 2026 outlook."
+
     if kharif_risk is None or len(kharif_risk) == 0:
         empty_state("🌱", "Kharif early-warning data not found.<br>Run <code>src/32_kharif_early_warning.py</code> first.")
     else:
         st.markdown(f"""
             <div class="naip-mode-banner">
-                <b>This is a RISK CLASSIFICATION, not a yield prediction.</b> Full Kharif/Rice yield for 2026 can
-                only be known once the season completes (around October) &mdash; predicting it now would be
-                overclaiming. What this honestly shows: each district's real rainfall so far this season, compared
-                to that SAME calendar window in its own 2020&ndash;2025 history. For context (not blended into the
-                number below): IMD's official national outlook is {IMD_2026_LPA_PCT}% of the Long Period Average,
-                with a {IMD_DEFICIENT_PROB_PCT}% chance of a deficient season nationally (IMD, verified {IMD_VERIFIED_DATE}).
+                <b>{season_label}</b> &mdash; {season_note}<br><br>
+                <b>What this tab shows:</b> Each district's actual rainfall recorded so far this June compared
+                to that SAME calendar window in 2020&ndash;2025 &mdash; an honest like-for-like comparison,
+                not a linear extrapolation. For context (not blended into the number): IMD's official national
+                outlook is {IMD_2026_LPA_PCT}% of the Long Period Average, with a {IMD_DEFICIENT_PROB_PCT}%
+                chance of a deficient season nationally (IMD, verified {IMD_VERIFIED_DATE}).
+                <b>This is a risk flag, not a yield number.</b>
             </div>
         """, unsafe_allow_html=True)
 
@@ -1195,80 +1277,79 @@ with tab_current:
 with tab_scenario:
     st.markdown("""
         <div class="naip-mode-banner">
-            <b>Advanced / testing tool &mdash; not a forecast.</b> Explore any district, crop, and historical year,
-            and apply manual rainfall or temperature adjustments to see how the model responds. Uses recorded
-            historical weather as the baseline. For real forward-looking estimates, use the
-            <b>Current Season Outlook</b> (real 2026 weather, calibrated range) or
-            <b>Kharif 2026 Early Warning</b> (real monsoon-so-far data) tabs instead.
+            <b>Current-Season What-If Explorer.</b> This tool starts from the real, live conditions for 2026
+            (actual NASA weather data, actual satellite NDVI, actual published yield trend) and lets you
+            adjust rainfall and temperature to see how the model's prediction responds. This is genuinely useful
+            for testing questions like "what if the monsoon undershoots further?" or "what happens to this
+            district if we get a late cold spell?" &mdash; using real data as the baseline, not an arbitrary
+            historical year.
         </div>
     """, unsafe_allow_html=True)
 
-    history = load_full_history()
-
-    form_col1, form_col2, form_col3 = st.columns(3)
-    with form_col1:
-        live_state = st.selectbox("State", sorted(history['state'].unique()))
-    with form_col2:
-        districts_in_state = sorted(history[history['state'] == live_state]['district'].unique())
-        live_district = st.selectbox("District", districts_in_state)
-    with form_col3:
-        live_crop = st.selectbox("Crop", ["Wheat", "Rice"])
-
-    district_history = history[
-        (history['state'] == live_state) & (history['district'] == live_district) & (history['crop'] == live_crop)
-    ].sort_values('year')
-
-    if len(district_history) == 0:
-        empty_state("🔍", f"No historical data available for {live_district} — {live_crop}.<br>Try another combination.")
+    if current_preds is None or len(current_preds) == 0:
+        empty_state("🔮", "Current-season predictions not yet generated.<br>Run <code>src/27_generate_current_predictions.py</code> first.")
     else:
-        available_years = district_history['year'].tolist()
-        live_year = st.selectbox("Year to predict", available_years, index=len(available_years) - 1)
+        form_col1, form_col2 = st.columns(2)
+        with form_col1:
+            live_state = st.selectbox("State", sorted(current_preds['state'].unique()), key="scen_state")
+        with form_col2:
+            districts_in_state = sorted(current_preds[current_preds['state'] == live_state]['district'].unique())
+            live_district = st.selectbox("District", districts_in_state, key="scen_district")
 
-        row_data_match = district_history[district_history['year'] == live_year]
-
-        if len(row_data_match) == 0:
-            empty_state("🔍", "No data row found for this exact year.")
+        crow_match = current_preds[current_preds['district'] == live_district]
+        if len(crow_match) == 0:
+            empty_state("🔍", f"No 2026 data available for {live_district}.")
         else:
-            row_data = row_data_match.iloc[0]
+            crow = crow_match.iloc[0]
 
-            st.markdown('<div class="naip-eyebrow" style="margin-top:18px;">Adjust Weather Scenario</div>', unsafe_allow_html=True)
-            st.caption("Defaults are the actual recorded weather for this district-year. Adjust to simulate a what-if scenario.")
+            st.markdown('<div class="naip-eyebrow" style="margin-top:18px;">Adjust from real 2026 conditions</div>', unsafe_allow_html=True)
+            st.caption(f"Baseline: actual NASA weather through {crow.get('data_as_of','2026-06-23')} · real NDVI · last published yield 2019. Sliders adjust forward from this real starting point.")
 
             wcol1, wcol2 = st.columns(2)
             with wcol1:
-                rainfall_adj = st.slider("Seasonal rainfall adjustment (%)", -50, 50, 0,
-                    help="Simulate a wetter or drier season than what actually occurred")
+                rainfall_adj = st.slider("Rainfall change from current season (%)", -50, 50, 0,
+                    help="Simulate if the rest of the season is wetter or drier than current conditions suggest")
             with wcol2:
                 temp_adj = st.slider("Temperature adjustment (°C)", -3.0, 3.0, 0.0, step=0.5,
-                    help="Simulate a hotter or cooler season")
+                    help="Simulate a hotter or cooler finish to the season than current readings")
 
-            live_features = row_data[FEATURES].copy().astype(float)
-            rain_cols = [c for c in FEATURES if 'rainfall' in c]
-            temp_cols = [c for c in FEATURES if 'temp' in c]
-            for c in rain_cols: live_features[c] = live_features[c] * (1 + rainfall_adj / 100)
-            for c in temp_cols: live_features[c] = live_features[c] + temp_adj
+            live_features = crow[FEATURES].copy().astype(float)
+            rain_cols = [c for c in FEATURES if 'rainfall' in c or 'water_balance' in c]
+            temp_cols = [c for c in FEATURES if 'temp' in c or 'gdd' in c]
+            for c in rain_cols:
+                if c in live_features.index:
+                    live_features[c] = live_features[c] * (1 + rainfall_adj / 100)
+            for c in temp_cols:
+                if c in live_features.index:
+                    live_features[c] = live_features[c] + temp_adj
 
             X_live = live_features.to_frame().T
             live_pred = model.predict(X_live)[0]
+            live_lower = xgb_lower_model.predict(X_live)[0]
+            live_upper = xgb_upper_model.predict(X_live)[0]
             live_shap = explainer.shap_values(X_live)[0]
+
+            baseline_pred = crow['current_pred_yield']
+            delta = live_pred - baseline_pred
 
             st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
             result_col, explain_col = st.columns([1, 1.2])
 
             with result_col:
-                actual_val = row_data.get('yield_kg_ha', None)
                 st.markdown(f"""
                     <div class="naip-card">
                         <div class="naip-stat-number">{live_pred:,.0f} <span style="font-size:1rem; color:var(--soil); font-weight:500;">kg/ha</span></div>
-                        <div class="naip-stat-label">Predicted Yield — {live_crop}, {live_district}, {int(live_year)}</div>
-                        {f'<div class="naip-stat-sub">Actual recorded yield: {actual_val:,.0f} kg/ha</div>' if pd.notna(actual_val) else ''}
+                        <div class="naip-stat-label">Scenario yield &mdash; {live_district}, Wheat 2026</div>
+                        <div class="naip-stat-sub">80% range: {live_lower:,.0f} &ndash; {live_upper:,.0f} kg/ha</div>
+                        <div class="naip-stat-sub" style="color:var(--soil);">vs. current baseline: {delta:+,.0f} kg/ha</div>
                     </div>
                 """, unsafe_allow_html=True)
+                st.caption(f"In plain terms: if rainfall runs {rainfall_adj:+d}% from current levels and temperature shifts {temp_adj:+.1f}°C, this district's likely wheat yield range shifts to {live_lower:,.0f}–{live_upper:,.0f} kg/ha.")
 
                 if rainfall_adj != 0 or temp_adj != 0:
-                    st.markdown(f'<div class="naip-scenario"><span class="naip-scenario-title">Scenario Active</span>Rainfall {rainfall_adj:+d}%, Temperature {temp_adj:+.1f}&deg;C vs. actual recorded conditions.</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="naip-scenario"><span class="naip-scenario-title">Scenario Active</span>Rainfall {rainfall_adj:+d}%, Temperature {temp_adj:+.1f}&deg;C from real 2026 baseline.</div>', unsafe_allow_html=True)
                 else:
-                    st.markdown('<div class="naip-safe"><span class="naip-safe-title">Baseline Scenario</span>Using actual recorded weather for this district-year.</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="naip-safe"><span class="naip-safe-title">Baseline &mdash; Real 2026 Conditions</span>No adjustments applied. Showing the model\'s current-season prediction unchanged.</div>', unsafe_allow_html=True)
 
             with explain_col:
                 st.markdown('<div class="naip-eyebrow">Why this prediction</div>', unsafe_allow_html=True)
@@ -1278,15 +1359,62 @@ with tab_scenario:
                 render_shap_bars(shap_df_live, shap_df_live['abs_val'].max())
 
             st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
-            st.markdown('<div class="naip-eyebrow">Recommended Actions</div>', unsafe_allow_html=True)
+            st.markdown('<div class="naip-eyebrow">Recommended Actions for This Scenario</div>', unsafe_allow_html=True)
 
-            advisory_row = row_data.copy()
-            advisory_row['drought_flag'] = 1 if rainfall_adj <= -25 else row_data.get('drought_flag', 0)
-            advisory_row['flood_flag'] = 1 if rainfall_adj >= 25 else row_data.get('flood_flag', 0)
-            render_advisory(generate_advisory(advisory_row, live_pred * 0.85, live_pred * 1.15, live_pred))
+            advisory_row = crow.copy()
+            advisory_row['drought_flag'] = 1 if rainfall_adj <= -25 else crow.get('drought_flag', 0)
+            advisory_row['flood_flag'] = 1 if rainfall_adj >= 25 else crow.get('flood_flag', 0)
+            render_advisory(generate_advisory(advisory_row, live_lower, live_upper, live_pred))
 
-            alert_type_3 = 'drought' if advisory_row.get('drought_flag', 0) == 1 else 'flood' if advisory_row.get('flood_flag', 0) == 1 else 'general'
-            render_live_context(live_state, live_district, live_crop, alert_type_3)
+            alert_type_scen = 'drought' if advisory_row.get('drought_flag', 0) == 1 else 'flood' if advisory_row.get('flood_flag', 0) == 1 else 'general'
+            render_live_context(live_state, live_district, 'Wheat', alert_type_scen)
+
+# =================================================================
+# TAB 6 — ABOUT
+# =================================================================
+
+with tab_about:
+    st.markdown("""
+        <div class="naip-mode-banner">
+            <b>National Agricultural Intelligence Platform (NAIP)</b> — a district-level crop yield prediction
+            and decision-support system for agricultural officers across Haryana, Punjab, and Uttar Pradesh.
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="naip-eyebrow">What this system does</div>', unsafe_allow_html=True)
+    st.markdown("""
+NAIP uses a machine learning model (tuned XGBoost, R²=0.87 on held-out test data) to predict wheat and
+rice yields at the district level, one season ahead. It combines three data sources:
+
+- **NASA POWER satellite weather** — daily rainfall, temperature, humidity, and solar radiation, updated within ~3 days of real time
+- **MODIS satellite NDVI** — a direct measure of vegetation health from space, updated every 16 days via Google Earth Engine
+- **Government crop yield records** — 22 years (1997–2019) of district-level published data used to train the model
+    """)
+
+    st.markdown('<div class="naip-eyebrow">How to use each tab</div>', unsafe_allow_html=True)
+    st.markdown("""
+- **Districts Requiring Attention** — your starting point. Shows which districts have meaningfully changed since the last check, ranked by severity. No input needed.
+- **Kharif 2026 Early Warning** — an honest risk flag (not a yield number) for the current monsoon season, based on real rainfall-so-far vs. each district's own history.
+- **Current Season Outlook** — the model's live Wheat 2026 prediction for every district, with a calibrated uncertainty range.
+- **Historical Results** — model predictions vs. actual government yields for 2018–19. This is the proof the model works, not a current forecast.
+- **Scenario Explorer** — adjust rainfall and temperature from the real 2026 baseline to test what-if questions before making procurement or insurance decisions.
+    """)
+
+    st.markdown('<div class="naip-eyebrow">Honest limitations</div>', unsafe_allow_html=True)
+    st.markdown("""
+- **Yield trend data lags by ~5 years.** Government district-level statistics are published with a 1–2 year delay. The model's trend signal refers to 2019, not 2025. This is a universal constraint shared by all published systems in India.
+- **Model accuracy varies by year.** Walk-forward validation shows R² ranging from 0.21 to 0.93 across years — the headline 0.87 is from a favorable test window. Some years are harder to predict than others.
+- **Interval calibration degrades at high predicted yields.** For the top 20% of predictions, the 80% interval only captures ~63% of actual outcomes. Verify high-yield predictions with field data before acting on them.
+- **Rice yield prediction is unavailable mid-season.** A yield number for rice before harvest would be overclaiming. The Kharif tab provides an honest risk flag instead.
+    """)
+
+    st.markdown('<div class="naip-eyebrow">Data & credits</div>', unsafe_allow_html=True)
+    st.markdown("""
+- Weather: NASA POWER (power.larc.nasa.gov)
+- Satellite NDVI: NASA MODIS MOD13Q1 via Google Earth Engine
+- Crop yield training data: Indian Government agricultural statistics (1997–2019)
+- Built with: Python · XGBoost · SHAP · Streamlit · Folium
+    """)
 
 # ---------------------------------------------------------------
 # FOOTER
@@ -1295,7 +1423,7 @@ with tab_scenario:
 st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
 st.markdown("""
     <div class="naip-meta">
-        NAIP v1.0 — Model: XGBoost (tuned) &middot; Test R&sup2;: 0.864 &middot; Validation: chronological split (train &le;2015, test 2018&ndash;19)<br>
-        Data: NASA POWER &middot; ICRISAT/Mendeley &middot; India Agriculture Crop Production &middot; Geocoding: Nominatim/OpenStreetMap
+        NAIP v2.0 &middot; Model: XGBoost (tuned, 38 features) &middot; R&sup2;: 0.8702 &middot; Walk-forward CV: 0.21&ndash;0.93 &middot; Interval coverage: 81.1%<br>
+        Data: NASA POWER &middot; MODIS NDVI (GEE) &middot; India Agriculture Crop Production &middot; Geocoding: Nominatim/OpenStreetMap
     </div>
 """, unsafe_allow_html=True)

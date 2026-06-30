@@ -2,9 +2,9 @@
   "subsample": 0.8,
   "reg_lambda": 1.0,
   "reg_alpha": 0.1,
-  "n_estimators": 600,
-  "min_child_weight": 1,
-  "max_depth": 8,
+  "n_estimators": 300,
+  "min_child_weight": 5,
+  "max_depth": 4,
   "learning_rate": 0.01,
   "colsample_bytree": 0.8
 }

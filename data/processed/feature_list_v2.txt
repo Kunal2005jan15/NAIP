@@ -26,3 +26,13 @@ frost_risk_days
 rainfall_anomaly_index
 drought_flag
 flood_flag
+gdd_kharif
+max_dry_streak_kharif
+rainfall_cv_kharif
+water_balance_kharif
+gdd_rabi
+max_dry_streak_rabi
+rainfall_cv_rabi
+water_balance_rabi
+ndvi_kharif
+ndvi_rabi

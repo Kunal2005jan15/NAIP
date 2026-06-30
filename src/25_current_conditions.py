@@ -39,6 +39,42 @@ with open('data/processed/feature_list_v2.txt') as f:
 
 print("\nAggregating most recent COMPLETED season (Rabi 2025-26) per district...")
 
+def _rabi_block_agronomic_features(block):
+    """
+    SAME formulas as script 15's _season_block_features(), kept in
+    sync deliberately: after finding (and fixing) a real train/serve
+    mismatch in the Rabi season window itself, any new feature added
+    to training MUST be mirrored here exactly, or we'd reintroduce
+    the same class of bug for the live dashboard.
+    """
+    base_temp = 10.0
+    gdd = np.maximum(block['temp_avg_c'] - base_temp, 0).sum()
+
+    is_dry = (block['rainfall_mm'] < 1.0).values
+    if is_dry.any():
+        change = np.diff(np.concatenate(([0], is_dry.astype(int), [0])))
+        starts = np.where(change == 1)[0]
+        ends = np.where(change == -1)[0]
+        max_dry_streak = (ends - starts).max() if len(starts) else 0
+    else:
+        max_dry_streak = 0
+
+    rain_mean = block['rainfall_mm'].mean()
+    rain_std = block['rainfall_mm'].std()
+    rainfall_cv = (rain_std / rain_mean) if rain_mean and rain_mean > 0 else np.nan
+
+    trange = (block['temp_max_c'] - block['temp_min_c']).clip(lower=0)
+    et0_daily = 0.0023 * block['solar_radiation'] * (block['temp_avg_c'] + 17.8) * np.sqrt(trange)
+    water_balance = block['rainfall_mm'].sum() - et0_daily.sum()
+
+    return pd.Series({
+        'current_gdd_rabi': gdd,
+        'current_max_dry_streak_rabi': max_dry_streak,
+        'current_rainfall_cv_rabi': rainfall_cv,
+        'current_water_balance_rabi': water_balance,
+    })
+
+
 def get_latest_seasonal_weather(df):
     results = []
     for (state, district), group in df.groupby(['state', 'district']):
@@ -60,6 +96,11 @@ def get_latest_seasonal_weather(df):
             'current_kharif_partial_days': kharif_partial['rainfall_mm'].notna().sum(),
             'data_as_of': df['date'].max().strftime('%Y-%m-%d'),
         }
+        if len(rabi_now) > 0:
+            row.update(_rabi_block_agronomic_features(rabi_now).to_dict())
+        else:
+            row.update({'current_gdd_rabi': np.nan, 'current_max_dry_streak_rabi': np.nan,
+                        'current_rainfall_cv_rabi': np.nan, 'current_water_balance_rabi': np.nan})
         results.append(row)
     return pd.DataFrame(results)
 
@@ -110,9 +151,27 @@ print(f"Year of latest known yield data: {latest_known['year'].max()} (most rece
 merged = latest_known.merge(
     current_seasonal[['state', 'district', 'current_rabi_rainfall', 'current_rabi_temp_avg',
                        'current_rabi_temp_max', 'current_rai', 'current_drought_flag',
-                       'current_flood_flag', 'data_as_of']],
+                       'current_flood_flag', 'data_as_of',
+                       'current_gdd_rabi', 'current_max_dry_streak_rabi',
+                       'current_rainfall_cv_rabi', 'current_water_balance_rabi']],
     on=['state', 'district'], how='left'
 )
+
+# NDVI (Tier 2) - optional, graceful fallback if script 35 hasn't
+# been run yet. Without this merge, ndvi_rabi stays at whatever
+# value was last known for the district (likely NaN for live rows) -
+# XGBoost handles the missing value natively, but won't get the
+# real live signal until script 35 is run.
+import os
+current_ndvi_path = 'data/processed/current_ndvi_2026.csv'
+if os.path.exists(current_ndvi_path):
+    current_ndvi = pd.read_csv(current_ndvi_path)
+    merged = merged.merge(current_ndvi, on=['state', 'district'], how='left')
+    print(f"Live NDVI merged. Match rate: {merged['current_ndvi_rabi'].notna().mean():.1%}")
+else:
+    print(f"[INFO] {current_ndvi_path} not found - proceeding without live NDVI.")
+    print("Run src/35_fetch_ndvi_current.py first to include it.")
+    merged['current_ndvi_rabi'] = np.nan
 
 # For Wheat (Rabi crop), override rabi weather features with REAL current data
 wheat_mask = merged['crop'] == 'Wheat'
@@ -122,6 +181,11 @@ merged.loc[wheat_mask, 'nasa_temp_max_rabi'] = merged.loc[wheat_mask, 'current_r
 merged.loc[wheat_mask, 'rainfall_anomaly_index'] = merged.loc[wheat_mask, 'current_rai']
 merged.loc[wheat_mask, 'drought_flag'] = merged.loc[wheat_mask, 'current_drought_flag']
 merged.loc[wheat_mask, 'flood_flag'] = merged.loc[wheat_mask, 'current_flood_flag']
+merged.loc[wheat_mask, 'gdd_rabi'] = merged.loc[wheat_mask, 'current_gdd_rabi']
+merged.loc[wheat_mask, 'max_dry_streak_rabi'] = merged.loc[wheat_mask, 'current_max_dry_streak_rabi']
+merged.loc[wheat_mask, 'rainfall_cv_rabi'] = merged.loc[wheat_mask, 'current_rainfall_cv_rabi']
+merged.loc[wheat_mask, 'water_balance_rabi'] = merged.loc[wheat_mask, 'current_water_balance_rabi']
+merged.loc[wheat_mask, 'ndvi_rabi'] = merged.loc[wheat_mask, 'current_ndvi_rabi']
 
 merged['baseline_yield_year'] = latest_known['year'].max()
 merged['weather_data_as_of'] = merged['data_as_of']

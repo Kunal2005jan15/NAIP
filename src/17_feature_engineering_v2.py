@@ -60,7 +60,22 @@ FEATURES = [
     'nasa_humidity_kharif', 'nasa_solar_annual',
     'heat_stress_days', 'frost_risk_days',
     'rainfall_anomaly_index', 'drought_flag', 'flood_flag',
+    # NEW (Tier 1 accuracy work, 2026-06-28): richer in-season
+    # agronomic signal, computed from data already on disk -
+    # aimed at giving the model genuine weather-driven explanatory
+    # power instead of leaning almost entirely on lag/trend.
+    'gdd_kharif', 'max_dry_streak_kharif', 'rainfall_cv_kharif', 'water_balance_kharif',
+    'gdd_rabi', 'max_dry_streak_rabi', 'rainfall_cv_rabi', 'water_balance_rabi',
 ]
+
+# NDVI (Tier 2, satellite vegetation index) - only added to the
+# feature list if script 34/16 actually produced it, so this script
+# still works for anyone who hasn't set up Earth Engine yet.
+if 'ndvi_kharif' in df.columns and 'ndvi_rabi' in df.columns:
+    FEATURES += ['ndvi_kharif', 'ndvi_rabi']
+    print("NDVI features detected - added to feature list.")
+else:
+    print("NDVI features not found in master dataset - proceeding without them.")
 
 TARGET = 'yield_kg_ha'
 

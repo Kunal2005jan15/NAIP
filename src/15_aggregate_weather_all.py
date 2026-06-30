@@ -22,39 +22,151 @@ print(f"Districts: {weather['district'].nunique()}")
 # SEASONAL AGGREGATION (same logic as the 3-district version)
 # ---------------------------------------------------------------
 
+def _season_block_features(block, season_label):
+    """
+    Computes richer agronomic features for one (state, district,
+    crop-year) season block of daily rows - all derived from data
+    already in weather_all_districts.csv, no new sourcing needed:
+
+      - gdd_{season}: Growing Degree Days (base 10C), accumulated
+        heat available to the crop - a better growth-stress signal
+        than a flat average temperature.
+      - max_dry_streak_{season}: longest run of consecutive days
+        with <1mm rain. Captures DROUGHT STRESS DURATION, not just
+        total deficit - this is exactly the timing-matters lesson
+        from the Kharif early-warning bug (script 32): a 25-day dry
+        spell hurts more than the same total mm spread evenly.
+      - rainfall_cv_{season}: coefficient of variation of daily
+        rainfall (std/mean) - how concentrated/bursty the season's
+        rain was, independent of the total.
+      - water_balance_{season}: rainfall minus a simplified
+        Hargreaves ET0 estimate, i.e. net moisture available rather
+        than raw rainfall alone.
+    """
+    base_temp = 10.0
+    gdd = np.maximum(block['temp_avg_c'] - base_temp, 0).sum()
+
+    is_dry = (block['rainfall_mm'] < 1.0).values
+    if is_dry.any():
+        # run-length encode consecutive True values
+        change = np.diff(np.concatenate(([0], is_dry.astype(int), [0])))
+        starts = np.where(change == 1)[0]
+        ends = np.where(change == -1)[0]
+        max_dry_streak = (ends - starts).max() if len(starts) else 0
+    else:
+        max_dry_streak = 0
+
+    rain_mean = block['rainfall_mm'].mean()
+    rain_std = block['rainfall_mm'].std()
+    rainfall_cv = (rain_std / rain_mean) if rain_mean and rain_mean > 0 else np.nan
+
+    # Simplified Hargreaves ET0 (mm/day) using measured solar radiation
+    # in place of extraterrestrial radiation - a standard simplification
+    # when only ground station data (not Ra tables) is available.
+    trange = (block['temp_max_c'] - block['temp_min_c']).clip(lower=0)
+    et0_daily = 0.0023 * block['solar_radiation'] * (block['temp_avg_c'] + 17.8) * np.sqrt(trange)
+    water_balance = block['rainfall_mm'].sum() - et0_daily.sum()
+
+    return pd.Series({
+        f'gdd_{season_label}': gdd,
+        f'max_dry_streak_{season_label}': max_dry_streak,
+        f'rainfall_cv_{season_label}': rainfall_cv,
+        f'water_balance_{season_label}': water_balance,
+    })
+
+
 def get_seasonal_weather(df):
-    results = []
-    
-    grouped = df.groupby(['state', 'district', 'year'])
-    total = len(grouped)
-    
-    for i, ((state, district, year), group) in enumerate(grouped):
-        kharif = group[group['month'].between(6, 10)]
-        rabi   = group[group['month'].isin([11, 12, 1, 2, 3])]
-        annual = group
-        
-        row = {
-            'state':                 state,
-            'district':              district,
-            'year':                  year,
-            'nasa_rainfall_kharif':  kharif['rainfall_mm'].sum(),
-            'nasa_temp_avg_kharif':  kharif['temp_avg_c'].mean(),
-            'nasa_temp_max_kharif':  kharif['temp_max_c'].mean(),
-            'nasa_humidity_kharif':  kharif['humidity_pct'].mean(),
-            'nasa_rainfall_rabi':    rabi['rainfall_mm'].sum(),
-            'nasa_temp_avg_rabi':    rabi['temp_avg_c'].mean(),
-            'nasa_temp_max_rabi':    rabi['temp_max_c'].mean(),
-            'nasa_rainfall_annual':  annual['rainfall_mm'].sum(),
-            'nasa_solar_annual':     annual['solar_radiation'].mean(),
-            'heat_stress_days':      (annual['temp_max_c'] > 35).sum(),
-            'frost_risk_days':       (annual['temp_min_c'] < 2).sum(),
-        }
-        results.append(row)
-        
-        if (i+1) % 500 == 0:
-            print(f"  Processed {i+1}/{total} district-years...")
-    
-    return pd.DataFrame(results)
+    """
+    BUG FIX (2026-06-28): the crop-year labeling convention (from
+    the raw "2001-02"-style Year column) uses the SOWING year - so
+    year=2001 means a Rabi crop sown Nov 2001, harvested Mar/Apr 2002.
+    The previous version of this function defined "Rabi for year=2001"
+    as months [11,12,1,2,3] WITHIN calendar year 2001 only - which
+    grabs Nov-Dec 2001 (correct) PLUS Jan-Mar 2001 (the tail of the
+    PREVIOUS season, 2000-01) while MISSING Jan-Mar 2002 entirely -
+    the actual grain-filling/harvest-period weather for the season
+    being modeled, and one of the most important determinants of
+    Indian wheat yield (terminal heat stress). The model was never
+    seeing the right weather for the season it was predicting.
+
+    FIX: assign each calendar day to the correct CROP YEAR before
+    aggregating, instead of grouping by calendar year:
+      - Kharif (Jun-Oct): unaffected, already within one calendar year
+      - Rabi (Nov-Mar): Nov/Dec -> that calendar year; Jan/Feb/Mar ->
+        PREVIOUS calendar year (i.e. the season that started the
+        preceding November)
+      - Annual: switched to the agricultural year (Jun Y - May Y+1),
+        matching India's official agricultural-year convention and
+        fully containing one Kharif + one Rabi season for crop-year Y,
+        instead of a calendar year that incoherently straddles parts
+        of two different crop seasons.
+
+    EXTENSION (2026-06-28, Tier 1 accuracy work): added GDD, max
+    dry-spell streak, rainfall concentration (CV), and a simplified
+    water-balance feature per season - all from data already on disk,
+    aimed at giving the model genuine in-season agronomic signal
+    instead of leaning almost entirely on lag/trend features (SHAP
+    showed weather at ~7% of importance before the window fix).
+    """
+    d = df.copy()
+    d['kharif_year'] = np.where(d['month'].between(6, 10), d['year'], np.nan)
+    d['rabi_year'] = np.where(
+        d['month'].isin([11, 12]), d['year'],
+        np.where(d['month'].isin([1, 2, 3]), d['year'] - 1, np.nan)
+    )
+    d['agri_year'] = np.where(d['month'] >= 6, d['year'], d['year'] - 1)
+
+    kharif_agg = d.dropna(subset=['kharif_year']).groupby(
+        ['state', 'district', 'kharif_year']
+    ).agg(
+        nasa_rainfall_kharif=('rainfall_mm', 'sum'),
+        nasa_temp_avg_kharif=('temp_avg_c', 'mean'),
+        nasa_temp_max_kharif=('temp_max_c', 'mean'),
+        nasa_humidity_kharif=('humidity_pct', 'mean'),
+    ).reset_index().rename(columns={'kharif_year': 'year'})
+    kharif_agg['year'] = kharif_agg['year'].astype(int)
+
+    print("  Computing richer Kharif agronomic features (GDD, dry streak, CV, water balance)...")
+    kharif_extra = d.dropna(subset=['kharif_year']).groupby(
+        ['state', 'district', 'kharif_year']
+    ).apply(lambda b: _season_block_features(b, 'kharif')).reset_index().rename(columns={'kharif_year': 'year'})
+    kharif_extra['year'] = kharif_extra['year'].astype(int)
+    kharif_agg = kharif_agg.merge(kharif_extra, on=['state', 'district', 'year'], how='left')
+
+    rabi_agg = d.dropna(subset=['rabi_year']).groupby(
+        ['state', 'district', 'rabi_year']
+    ).agg(
+        nasa_rainfall_rabi=('rainfall_mm', 'sum'),
+        nasa_temp_avg_rabi=('temp_avg_c', 'mean'),
+        nasa_temp_max_rabi=('temp_max_c', 'mean'),
+        rabi_days_observed=('rainfall_mm', 'size'),
+    ).reset_index().rename(columns={'rabi_year': 'year'})
+    rabi_agg['year'] = rabi_agg['year'].astype(int)
+    # Full Nov-Mar window is 151/152 days. The most recent crop-year's
+    # Rabi season needs Jan-Mar of the FOLLOWING calendar year, which
+    # may not exist if the raw weather feed ends mid-season (true for
+    # 2019, since this dataset ends 2019-12-31). Flag partial seasons
+    # explicitly rather than silently averaging over fewer days.
+    rabi_agg['rabi_season_partial'] = (rabi_agg['rabi_days_observed'] < 140).astype(int)
+
+    print("  Computing richer Rabi agronomic features (GDD, dry streak, CV, water balance)...")
+    rabi_extra = d.dropna(subset=['rabi_year']).groupby(
+        ['state', 'district', 'rabi_year']
+    ).apply(lambda b: _season_block_features(b, 'rabi')).reset_index().rename(columns={'rabi_year': 'year'})
+    rabi_extra['year'] = rabi_extra['year'].astype(int)
+    rabi_agg = rabi_agg.merge(rabi_extra, on=['state', 'district', 'year'], how='left')
+
+    annual_agg = d.groupby(['state', 'district', 'agri_year']).agg(
+        nasa_rainfall_annual=('rainfall_mm', 'sum'),
+        nasa_solar_annual=('solar_radiation', 'mean'),
+        heat_stress_days=('temp_max_c', lambda x: (x > 35).sum()),
+        frost_risk_days=('temp_min_c', lambda x: (x < 2).sum()),
+    ).reset_index().rename(columns={'agri_year': 'year'})
+    annual_agg['year'] = annual_agg['year'].astype(int)
+
+    merged = kharif_agg.merge(rabi_agg, on=['state', 'district', 'year'], how='outer')
+    merged = merged.merge(annual_agg, on=['state', 'district', 'year'], how='outer')
+    return merged
 
 print("\nAggregating to seasonal features (this takes 1-2 minutes)...")
 nasa_seasonal = get_seasonal_weather(weather)
