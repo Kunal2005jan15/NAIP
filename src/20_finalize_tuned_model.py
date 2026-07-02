@@ -77,7 +77,7 @@ quantile_params = {k: v for k, v in best_params.items()}
 xgb_lower = xgb.XGBRegressor(
     **quantile_params,
     objective='reg:quantileerror',
-    quantile_alpha=0.06,
+    quantile_alpha=0.02,
     random_state=42, verbosity=0,
 )
 xgb_lower.fit(X_train, y_train)
@@ -91,19 +91,19 @@ xgb_lower.fit(X_train, y_train)
 # would get a feature_names mismatch. Saving them properly now.
 with open('outputs/models/xgb_lower.pkl', 'wb') as f:
     pickle.dump(xgb_lower, f)
-print("Saved: outputs/models/xgb_lower.pkl (v2 features, quantile_alpha=0.06)")
+print("Saved: outputs/models/xgb_lower.pkl (v2 features, quantile_alpha=0.02)")
 
 xgb_upper = xgb.XGBRegressor(
     **quantile_params,
     objective='reg:quantileerror',
-    quantile_alpha=0.94,
+    quantile_alpha=0.98,
     random_state=42, verbosity=0,
 )
 xgb_upper.fit(X_train, y_train)
 
 with open('outputs/models/xgb_upper.pkl', 'wb') as f:
     pickle.dump(xgb_upper, f)
-print("Saved: outputs/models/xgb_upper.pkl (v2 features, quantile_alpha=0.94)")
+print("Saved: outputs/models/xgb_upper.pkl (v2 features, quantile_alpha=0.98)")
 
 pred_lower = xgb_lower.predict(X_test)
 pred_upper = xgb_upper.predict(X_test)

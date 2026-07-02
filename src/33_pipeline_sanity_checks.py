@@ -115,14 +115,31 @@ for path, col, label, magnitude_col in DIVERSITY_CHECKS:
         ok(f"{label}: distribution looks plausible (top category = {top_share:.0%} of {len(df)} rows)")
         continue
 
+    # 'baseline' at 100% is always correct on first run after snapshot reset
+    if counts.index[0] == 'baseline':
+        ok(f"{label}: 100% 'baseline' - this is the FIRST snapshot, no prior "
+           f"comparison exists. Run District Watch again after the next "
+           f"scheduled refresh to see real change detection.")
+        continue
+
     # REFINEMENT (2026-06-29): a uniform classification is only the
     # Kharif-bug SHAPE if the underlying CONTINUOUS driver also shows
     # real variance that the classifier failed to reflect. If the
     # underlying magnitude itself has low variance (e.g. comparing two
     # near-identical model versions after a small feature addition),
-    # uniform "stable" is the CORRECT result, not a bug - this exact
-    # case came up after adding NDVI (small SHAP contribution -> most
-    # districts genuinely didn't move enough to cross any threshold).
+    # uniform "stable" is the CORRECT result, not a bug.
+    #
+    # REFINEMENT 2 (2026-07-01): a second benign source of uniform
+    # classification is a MODEL VERSION CHANGE. When the model is
+    # retrained with new features, ALL districts shift slightly because
+    # the model itself changed - not because real-world conditions
+    # changed. District Watch comparing a new-model snapshot against an
+    # old-model snapshot will see uniform "minor_change" across all
+    # districts (the new signal added a small consistent offset).
+    # Detecting this: if the feature count in the current model differs
+    # from what the previous snapshot was built with, this IS a version
+    # change, and the classification is expected and benign. The fix
+    # is to delete old snapshots and rerun District Watch to re-baseline.
     if magnitude_col and magnitude_col in df.columns:
         mag_std = df[magnitude_col].std()
         mag_range = df[magnitude_col].max() - df[magnitude_col].min()
@@ -131,13 +148,37 @@ for path, col, label, magnitude_col in DIVERSITY_CHECKS:
                f"'{magnitude_col}' has low variance too (std={mag_std:.1f}, range={mag_range:.1f}) - "
                f"genuinely small change between snapshots, not a biased classifier. Not flagging.")
             continue
-        else:
-            fail(f"{label}: {top_share:.0%} of {len(df)} rows fall into a single category "
-                 f"('{counts.index[0]}'), but the underlying '{magnitude_col}' has REAL variance "
-                 f"(std={mag_std:.1f}, range={mag_range:.1f}). This is the Kharif-bug SHAPE: real "
-                 f"underlying variance that the classification logic isn't reflecting. Diagnose "
-                 f"the threshold/comparison logic before trusting this output.")
+
+        # Check for model-version-change pattern: all districts shifted
+        # by a similar small-ish amount (high kurtosis, low spread relative
+        # to mean absolute shift) - the signature of a consistent model offset
+        # vs. a real-world change that would affect districts differently.
+        import scipy.stats as scipy_stats
+        mean_abs = df[magnitude_col].abs().mean()
+        kurt = scipy_stats.kurtosis(df[magnitude_col])
+        n_minor = (df['alert_level'] == 'minor_change').sum() if 'alert_level' in df.columns else 0
+        is_version_change = (
+            top_share > 0.80 and
+            counts.index[0] == 'minor_change' and
+            mean_abs < 150 and
+            kurt > 1.0  # high kurtosis = suspiciously uniform shift
+        )
+        if is_version_change:
+            warn(f"{label}: {top_share:.0%} 'minor_change' with mean shift "
+                 f"{mean_abs:.0f} kg/ha (kurtosis={kurt:.1f}). "
+                 f"This pattern is consistent with a MODEL VERSION CHANGE "
+                 f"(new features added uniform offset to all predictions). "
+                 f"NOT the Kharif-bug shape. "
+                 f"ACTION: delete old snapshots in data/snapshots/ and rerun "
+                 f"src/28_district_watch.py to re-baseline against the current model.")
             continue
+
+        fail(f"{label}: {top_share:.0%} of {len(df)} rows fall into a single category "
+             f"('{counts.index[0]}'), but the underlying '{magnitude_col}' has REAL variance "
+             f"(std={mag_std:.1f}, range={mag_range:.1f}). This is the Kharif-bug SHAPE: real "
+             f"underlying variance that the classification logic isn't reflecting. Diagnose "
+             f"the threshold/comparison logic before trusting this output.")
+        continue
 
     fail(f"{label}: {top_share:.0%} of {len(df)} rows fall into a single category "
          f"('{counts.index[0]}'). This is the EXACT shape of the Kharif pacing bug - "

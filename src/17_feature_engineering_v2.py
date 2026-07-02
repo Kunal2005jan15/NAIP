@@ -77,6 +77,24 @@ if 'ndvi_kharif' in df.columns and 'ndvi_rabi' in df.columns:
 else:
     print("NDVI features not found in master dataset - proceeding without them.")
 
+if 'water_pct_kharif' in df.columns and 'water_pct_rabi' in df.columns:
+    FEATURES += ['water_pct_kharif', 'water_pct_rabi']
+    print("Surface water features detected - added to feature list.")
+else:
+    print("Surface water features not found in master dataset - proceeding without them.")
+
+if 'gw_depth_premonsoon_m' in df.columns and 'gw_depth_postmonsoon_m' in df.columns:
+    gw_completeness = df['gw_depth_premonsoon_m'].notna().mean()
+    if gw_completeness >= 0.70:
+        FEATURES += ['gw_depth_premonsoon_m', 'gw_depth_postmonsoon_m']
+        print(f"Groundwater depth features detected ({gw_completeness:.1%} complete) - added to feature list.")
+    else:
+        print(f"[INFO] Groundwater depth features detected but only {gw_completeness:.1%} complete.")
+        print("       Threshold for inclusion as model feature: 70%. NOT added to FEATURES.")
+        print("       Data remains in master dataset for analysis (see src/38_groundwater_analysis.py).")
+else:
+    print("Groundwater depth features not found in master dataset - proceeding without them.")
+
 TARGET = 'yield_kg_ha'
 
 model_df = df.dropna(subset=['lag_yield_1']).copy()

@@ -36,3 +36,5 @@ rainfall_cv_rabi
 water_balance_rabi
 ndvi_kharif
 ndvi_rabi
+water_pct_kharif
+water_pct_rabi
