@@ -1,5 +1,6 @@
 # =============================================================
-# NAIP Dashboard — National Agricultural Intelligence Platform
+# ANNA Dashboard — Agricultural Nowcasting and Nearly-live Analytics
+# अन्न (Anna) — "Food is Divine" (Taittiriya Upanishad: Annam Brahma)
 # =============================================================
 # Design language: "Earth & Grain"
 #   Background : warm paper (#FAF6EE)
@@ -45,7 +46,7 @@ import os
 # ---------------------------------------------------------------
 
 st.set_page_config(
-    page_title="NAIP — Agricultural Intelligence Platform",
+    page_title="ANNA — Agricultural Nowcasting and Nearly-live Analytics",
     page_icon="🌾",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -57,405 +58,657 @@ st.set_page_config(
 
 CUSTOM_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700;9..144,800&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+/* ================================================================
+   ANNA — Design System v3.0 "Earth & Grain, Elevated"
+   Award-winning aesthetic: bold editorial typography, layered depth,
+   micro-animations, glassmorphism accents, modern data visualization
+   ================================================================ */
 
 :root {
-    --paper:      #FAF6EE;
-    --paper-deep: #F1EADB;
-    --ink:        #2B2417;
-    --ink-soft:   #564B38;
-    --wheat:      #C9A227;
-    --wheat-dark: #9C7E1A;
-    --wheat-pale: #F4E9C4;
-    --soil:       #8B5A2B;
-    --soil-light: #D9C4A8;
-    --green:      #3D6B5C;
-    --green-bg:   #E7EFEA;
-    --alert:      #A33B2E;
-    --alert-bg:   #F5E4DF;
-    --line:       #DDD2BC;
-    --shadow:     0 1px 2px rgba(43,36,23,0.04), 0 2px 8px rgba(43,36,23,0.04);
+    /* Core palette */
+    --paper:       #F8F4EC;
+    --paper-deep:  #EFE8D8;
+    --paper-glass: rgba(248,244,236,0.72);
+    --ink:         #1C1610;
+    --ink-soft:    #4A3F2F;
+    --ink-faint:   #8C7B64;
+
+    /* Brand */
+    --wheat:       #C9A227;
+    --wheat-dark:  #9C7E1A;
+    --wheat-pale:  #F6EDCB;
+    --wheat-glow:  rgba(201,162,39,0.18);
+    --soil:        #7A4E2A;
+    --soil-light:  #D4B896;
+    --green:       #2E5E4E;
+    --green-mid:   #3D6B5C;
+    --green-bg:    #E4EDE9;
+    --green-glow:  rgba(46,94,78,0.15);
+    --alert:       #9B2C1E;
+    --alert-mid:   #C0392B;
+    --alert-bg:    #F7E8E5;
+    --alert-glow:  rgba(155,44,30,0.15);
+    --line:        #DDD3BD;
+    --line-faint:  #EDE6D6;
+
+    /* Gradients */
+    --grad-hero:   linear-gradient(135deg, #1C1610 0%, #3D2B1A 40%, #5C3D1E 70%, #9C7E1A 100%);
+    --grad-wheat:  linear-gradient(120deg, var(--wheat-pale), var(--paper));
+    --grad-green:  linear-gradient(120deg, var(--green-bg), var(--paper));
+    --grad-alert:  linear-gradient(120deg, var(--alert-bg), var(--paper));
+
+    /* Shadows (layered depth) */
+    --shadow-xs:   0 1px 2px rgba(28,22,16,0.06);
+    --shadow-sm:   0 2px 8px rgba(28,22,16,0.08), 0 1px 2px rgba(28,22,16,0.04);
+    --shadow-md:   0 8px 24px rgba(28,22,16,0.10), 0 2px 6px rgba(28,22,16,0.06);
+    --shadow-lg:   0 20px 48px rgba(28,22,16,0.14), 0 4px 12px rgba(28,22,16,0.08);
+    --shadow-glow: 0 0 0 3px var(--wheat-glow), 0 8px 24px rgba(201,162,39,0.12);
+
+    /* Radii */
+    --r-sm:  6px;
+    --r-md:  12px;
+    --r-lg:  20px;
+    --r-xl:  28px;
+
+    /* Transitions */
+    --t-fast:   0.15s cubic-bezier(0.4,0,0.2,1);
+    --t-smooth: 0.28s cubic-bezier(0.4,0,0.2,1);
+    --t-spring: 0.4s cubic-bezier(0.34,1.56,0.64,1);
 }
 
-html, body, [class*="css"]  {
+/* ── KEYFRAME ANIMATIONS ── */
+
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@keyframes slideRight {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+}
+@keyframes shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position: 600px 0; }
+}
+@keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 0 0 var(--wheat-glow); }
+    50%       { box-shadow: 0 0 0 8px transparent; }
+}
+@keyframes barFill {
+    from { width: 0%; opacity: 0.4; }
+    to   { opacity: 1; }
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+@keyframes breathe {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.6; transform: scale(0.92); }
+}
+@keyframes gradientShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+@keyframes counterUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── BASE ── */
+html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
     background-color: var(--paper) !important;
     color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 .stApp { background-color: var(--paper); }
-.block-container { padding-top: 1.6rem; padding-bottom: 3rem; max-width: 1320px; }
+.block-container {
+    padding-top: 0 !important;
+    padding-bottom: 4rem;
+    max-width: 1400px;
+}
 
-/* ---- Masthead ---- */
+/* ── HERO MASTHEAD ── */
 .naip-masthead {
+    background: var(--grad-hero);
+    background-size: 200% 200%;
+    animation: gradientShift 12s ease infinite;
+    padding: 52px 56px 44px;
+    margin: -1rem -1rem 0 -1rem;
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    padding: 6px 2px 20px 2px;
-    border-bottom: 3px solid var(--ink);
-    margin-bottom: 4px;
+    position: relative;
+    overflow: hidden;
 }
+.naip-masthead::before {
+    content: "अन्न";
+    position: absolute;
+    right: 56px;
+    top: 50%;
+    transform: translateY(-60%);
+    font-family: 'Fraunces', serif;
+    font-size: 11rem;
+    font-weight: 800;
+    color: rgba(255,255,255,0.04);
+    letter-spacing: -0.04em;
+    line-height: 1;
+    pointer-events: none;
+    user-select: none;
+}
+.naip-masthead::after {
+    content: "";
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--wheat) 0%, rgba(201,162,39,0.3) 60%, transparent 100%);
+}
+
 .naip-title {
     font-family: 'Fraunces', serif;
-    font-weight: 700;
-    font-size: 2.7rem;
-    letter-spacing: -0.015em;
-    color: var(--ink);
-    line-height: 1;
+    font-weight: 800;
+    font-size: 3.8rem;
+    letter-spacing: -0.03em;
+    color: #FFFFFF;
+    line-height: 0.95;
+    animation: fadeUp 0.7s var(--t-smooth) both;
 }
-.naip-title span { color: var(--wheat-dark); font-weight: 500; }
+.naip-title span {
+    color: var(--wheat);
+    font-weight: 400;
+    font-size: 1.9rem;
+    display: block;
+    margin-top: 6px;
+    letter-spacing: -0.01em;
+    animation: fadeUp 0.7s 0.1s var(--t-smooth) both;
+}
 .naip-subtitle {
     font-family: 'Inter', sans-serif;
-    font-size: 0.92rem;
-    color: var(--soil);
-    letter-spacing: 0.05em;
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    font-weight: 600;
-    margin-top: 6px;
+    font-weight: 500;
+    margin-top: 14px;
+    animation: fadeUp 0.7s 0.2s var(--t-smooth) both;
 }
 .naip-masthead-tag {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.72rem;
-    color: var(--ink-soft);
+    color: rgba(255,255,255,0.4);
     text-align: right;
-    line-height: 1.5;
+    line-height: 1.8;
     padding-bottom: 4px;
+    animation: fadeIn 1s 0.4s both;
 }
 
-/* ---- Eyebrows + section labels ---- */
-.naip-eyebrow {
+/* ── LIVE PULSE INDICATOR ── */
+.anna-live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 100px;
+    padding: 5px 14px 5px 10px;
     font-family: 'Inter', sans-serif;
     font-size: 0.72rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.75);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 16px;
+    backdrop-filter: blur(8px);
+    animation: fadeIn 1s 0.5s both;
+}
+.anna-live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #4ADE80;
+    animation: breathe 2s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+/* ── STAT CARDS ── */
+.naip-card {
+    background: #FFFFFF;
+    border: 1px solid var(--line-faint);
+    border-radius: var(--r-lg);
+    padding: 24px 26px 22px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    overflow: hidden;
+    transition: transform var(--t-smooth), box-shadow var(--t-smooth);
+    animation: fadeUp 0.5s var(--t-smooth) both;
+}
+.naip-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--wheat), var(--wheat-dark));
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.naip-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+}
+.naip-stat-number {
+    font-family: 'Fraunces', serif;
+    font-size: 2.6rem;
     font-weight: 700;
-    letter-spacing: 0.13em;
+    color: var(--ink);
+    line-height: 1;
+    animation: counterUp 0.6s var(--t-smooth) both;
+}
+.naip-stat-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    margin-top: 6px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+.naip-stat-sub {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.78rem;
+    color: var(--green-mid);
+    margin-top: 10px;
+    line-height: 1.4;
+}
+
+/* ── EYEBROWS ── */
+.naip-eyebrow {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--wheat-dark);
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 .naip-eyebrow::before {
     content: "";
     display: inline-block;
-    width: 14px;
+    width: 20px;
     height: 2px;
-    background: var(--wheat-dark);
+    background: linear-gradient(90deg, var(--wheat-dark), var(--wheat));
+    border-radius: 2px;
+    animation: slideRight 0.4s var(--t-smooth) both;
+    transform-origin: left;
 }
 
-/* ---- Cards / stats ---- */
-.naip-card {
-    background: #FFFFFF;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    padding: 18px 20px;
-    margin-bottom: 14px;
-    box-shadow: var(--shadow);
+/* ── STATUS BOXES ── */
+.naip-alert {
+    background: var(--grad-alert);
+    border: 1px solid rgba(155,44,30,0.18);
+    border-left: 4px solid var(--alert-mid);
+    border-radius: var(--r-md);
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    box-shadow: 0 2px 12px var(--alert-glow);
+    animation: fadeUp 0.35s var(--t-smooth) both;
+    transition: transform var(--t-fast), box-shadow var(--t-fast);
 }
-.naip-stat-number {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 2.05rem;
-    font-weight: 700;
-    color: var(--ink);
-    line-height: 1.1;
+.naip-alert:hover {
+    transform: translateX(3px);
+    box-shadow: 0 4px 20px var(--alert-glow);
 }
-.naip-stat-label {
-    font-family: 'Inter', sans-serif;
-    font-size: 0.82rem;
-    color: var(--soil);
-    margin-top: 3px;
-    font-weight: 500;
+.naip-safe {
+    background: var(--grad-green);
+    border: 1px solid rgba(46,94,78,0.15);
+    border-left: 4px solid var(--green-mid);
+    border-radius: var(--r-md);
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    box-shadow: 0 2px 12px var(--green-glow);
+    animation: fadeUp 0.35s var(--t-smooth) both;
+    transition: transform var(--t-fast);
 }
-.naip-stat-sub {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.76rem;
-    color: var(--green);
-    margin-top: 7px;
+.naip-safe:hover { transform: translateX(3px); }
+.naip-scenario {
+    background: var(--grad-wheat);
+    border: 1px solid rgba(201,162,39,0.2);
+    border-left: 4px solid var(--wheat-dark);
+    border-radius: var(--r-md);
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    box-shadow: 0 2px 12px var(--wheat-glow);
+    animation: fadeUp 0.35s var(--t-smooth) both;
+    transition: transform var(--t-fast);
 }
-
-/* ---- Status boxes ---- */
-.naip-alert, .naip-safe, .naip-scenario {
-    padding: 14px 18px;
-    border-radius: 4px;
-    margin-bottom: 14px;
-    font-size: 0.91rem;
-    line-height: 1.45;
-}
-.naip-alert    { background: var(--alert-bg);  border-left: 4px solid var(--alert); }
-.naip-safe     { background: var(--green-bg);  border-left: 4px solid var(--green); }
-.naip-scenario { background: #FBF3E0;           border-left: 4px solid var(--wheat-dark); }
+.naip-scenario:hover { transform: translateX(3px); }
 .naip-alert-title, .naip-safe-title, .naip-scenario-title {
     font-weight: 700;
     font-family: 'Inter', sans-serif;
     text-transform: uppercase;
-    font-size: 0.74rem;
-    letter-spacing: 0.07em;
-    margin-bottom: 5px;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    margin-bottom: 6px;
     display: block;
 }
-.naip-alert-title    { color: var(--alert); }
+.naip-alert-title    { color: var(--alert-mid); }
 .naip-safe-title     { color: var(--green); }
 .naip-scenario-title { color: var(--wheat-dark); }
 
-/* ---- SHAP bars ---- */
+/* ── SHAP BARS ── */
 .shap-row {
     display: flex;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     font-family: 'Inter', sans-serif;
-    font-size: 0.85rem;
+    font-size: 0.83rem;
 }
-.shap-label { width: 40%; color: var(--ink); padding-right: 10px; line-height: 1.3; }
+.shap-label {
+    width: 42%;
+    color: var(--ink-soft);
+    padding-right: 12px;
+    line-height: 1.3;
+    font-size: 0.8rem;
+}
 .shap-bar-track {
     flex-grow: 1;
-    height: 16px;
-    background: var(--soil-light);
-    border-radius: 3px;
+    height: 10px;
+    background: var(--line-faint);
+    border-radius: 100px;
     overflow: hidden;
 }
-.shap-bar-fill-pos { height: 100%; background: var(--green); border-radius: 3px; }
-.shap-bar-fill-neg { height: 100%; background: var(--alert); border-radius: 3px; }
+.shap-bar-fill-pos {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--green-mid));
+    border-radius: 100px;
+    animation: barFill 0.8s var(--t-smooth) both;
+    transform-origin: left;
+}
+.shap-bar-fill-neg {
+    height: 100%;
+    background: linear-gradient(90deg, var(--alert), var(--alert-mid));
+    border-radius: 100px;
+    animation: barFill 0.8s var(--t-smooth) both;
+    transform-origin: left;
+}
 .shap-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.76rem;
-    width: 68px;
+    font-size: 0.73rem;
+    width: 64px;
     text-align: right;
-    color: var(--soil);
+    color: var(--ink-faint);
     font-weight: 600;
+    padding-left: 8px;
 }
 
-/* ---- Dividers + headers ---- */
-.naip-divider { border-top: 1px solid var(--line); margin: 24px 0 20px 0; }
+/* ── DIVIDERS ── */
+.naip-divider {
+    border: none;
+    border-top: 1px solid var(--line-faint);
+    margin: 28px 0 24px;
+    position: relative;
+}
+
+/* ── PANEL HEADERS ── */
 .naip-panel-district {
     font-family: 'Fraunces', serif;
-    font-weight: 600;
-    font-size: 1.7rem;
+    font-weight: 700;
+    font-size: 2rem;
     color: var(--ink);
-    line-height: 1.15;
+    line-height: 1.1;
+    animation: fadeUp 0.4s var(--t-smooth) both;
 }
 .naip-panel-state {
     font-family: 'Inter', sans-serif;
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     color: var(--soil);
     text-transform: uppercase;
-    letter-spacing: 0.07em;
-    font-weight: 600;
-}
-.naip-meta {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.74rem;
-    color: var(--ink-soft);
-    line-height: 1.6;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    animation: fadeIn 0.4s var(--t-smooth) both;
 }
 
-/* ---- Map legend ---- */
+/* ── META / FOOTER ── */
+.naip-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--ink-faint);
+    line-height: 1.7;
+    padding: 20px 0 8px;
+    border-top: 1px solid var(--line-faint);
+}
+
+/* ── MAP LEGEND ── */
 .naip-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
-    padding: 10px 14px;
-    background: var(--paper-deep);
-    border: 1px solid var(--line);
-    border-radius: 4px;
+    gap: 14px;
+    padding: 12px 16px;
+    background: #FFFFFF;
+    border: 1px solid var(--line-faint);
+    border-radius: var(--r-md);
     margin-bottom: 14px;
     font-family: 'Inter', sans-serif;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     color: var(--ink-soft);
+    box-shadow: var(--shadow-xs);
 }
-.naip-legend-item { display: flex; align-items: center; gap: 6px; }
-.naip-legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid rgba(43,36,23,0.25); }
+.naip-legend-item { display: flex; align-items: center; gap: 7px; }
+.naip-legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    border: 2px solid rgba(28,22,16,0.2);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.8);
+}
 
-/* ---- Empty state ---- */
+/* ── EMPTY STATE ── */
 .naip-empty {
     text-align: center;
-    padding: 56px 24px;
+    padding: 72px 24px;
     background: #FFFFFF;
     border: 1px dashed var(--line);
-    border-radius: 6px;
+    border-radius: var(--r-xl);
+    animation: fadeIn 0.4s both;
 }
-.naip-empty-icon { font-size: 2rem; margin-bottom: 12px; opacity: 0.7; }
+.naip-empty-icon { font-size: 2.4rem; margin-bottom: 14px; opacity: 0.5; }
 .naip-empty-text {
     font-family: 'Inter', sans-serif;
-    font-size: 0.92rem;
-    color: var(--soil);
-    line-height: 1.5;
+    font-size: 0.9rem;
+    color: var(--ink-faint);
+    line-height: 1.6;
 }
 
-/* ---- Mode intro banner ---- */
+/* ── MODE BANNERS ── */
 .naip-mode-banner {
     font-family: 'Inter', sans-serif;
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     color: var(--ink-soft);
-    line-height: 1.55;
-    padding: 13px 16px;
-    background: var(--paper-deep);
-    border-radius: 4px;
-    margin-bottom: 16px;
+    line-height: 1.6;
+    padding: 16px 20px;
+    background: #FFFFFF;
+    border: 1px solid var(--line-faint);
+    border-radius: var(--r-md);
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-xs);
+    position: relative;
+    overflow: hidden;
+    animation: fadeUp 0.4s var(--t-smooth) both;
+}
+.naip-mode-banner::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--wheat), var(--wheat-dark));
+    border-radius: var(--r-md) 0 0 var(--r-md);
 }
 
-/* ---- Streamlit chrome cleanup ---- */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
+/* ── TABS STYLING ── */
+.stTabs [data-baseweb="tab-list"] {
+    background: #FFFFFF !important;
+    border-radius: var(--r-md) !important;
+    padding: 6px !important;
+    gap: 4px !important;
+    border: 1px solid var(--line-faint) !important;
+    box-shadow: var(--shadow-xs) !important;
+    margin-bottom: 20px !important;
+    overflow-x: auto;
+}
+.stTabs [data-baseweb="tab"] {
+    background: transparent !important;
+    border-radius: var(--r-sm) !important;
+    border: none !important;
+    color: var(--ink-faint) !important;
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 0.82rem !important;
+    padding: 8px 16px !important;
+    transition: all var(--t-fast) !important;
+    white-space: nowrap;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    background: var(--wheat-pale) !important;
+    color: var(--wheat-dark) !important;
+}
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg, var(--soil) 0%, var(--ink) 100%) !important;
+    color: #FFFFFF !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+/* Force every nested element inside the active tab (Streamlit wraps the
+   label text in its own <p>/<div>) to white — otherwise the global
+   ".stApp *" ink-color override below wins on those children and the
+   label text goes dark-on-dark and disappears, leaving only the emoji
+   visible against a near-black bar. */
+.stTabs [aria-selected="true"],
+.stTabs [aria-selected="true"] * {
+    color: #FFFFFF !important;
+}
+.stTabs [data-baseweb="tab-panel"] {
+    padding-top: 4px !important;
+}
+.stTabs [data-baseweb="tab-highlight"] {
+    display: none !important;
+}
+
+/* ── STREAMLIT CHROME CLEANUP ── */
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+header { visibility: hidden; }
 div[data-testid="stRadio"] > label { display: none; }
 
-/* =================================================================
-   FORCED TEXT/BACKGROUND CONTRAST FIXES
-   Streamlit's own theme defaults can silently override our custom
-   styling, causing text to render in low-contrast gray or even
-   white-on-white depending on the user's system theme. Every
-   native widget below gets an EXPLICIT color so visibility never
-   depends on Streamlit's internal defaults.
-   ================================================================= */
+/* ── CONTRAST OVERRIDES (must come last) ── */
+.stApp, .stApp * { color: var(--ink) !important; }
+.stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span { color: var(--ink) !important; }
 
-/* Root-level override: force our palette everywhere, no exceptions */
-.stApp, .stApp * {
-    color: var(--ink) !important;
-}
-
-/* Headings/text inside markdown blocks */
-.stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span {
-    color: var(--ink) !important;
-}
-
-/* Radio buttons (mode toggle, crop selector) */
 div[data-testid="stRadio"] label,
 div[data-testid="stRadio"] label span,
 div[data-testid="stRadio"] label p {
-    color: var(--ink) !important;
-    font-weight: 600 !important;
-}
-div[data-testid="stRadio"] label[data-baseweb="radio"] > div:first-child {
-    border-color: var(--soil) !important;
-}
-
-/* Selectboxes (state/district/crop/year dropdowns) */
-div[data-testid="stSelectbox"] label {
-    color: var(--ink-soft) !important;
-    font-weight: 600 !important;
-    font-size: 0.85rem !important;
+    color: var(--ink) !important; font-weight: 600 !important;
 }
 div[data-baseweb="select"] {
     background-color: #FFFFFF !important;
+    border-radius: var(--r-sm) !important;
 }
 div[data-baseweb="select"] > div {
     background-color: #FFFFFF !important;
     color: var(--ink) !important;
     border-color: var(--line) !important;
+    border-radius: var(--r-sm) !important;
 }
-div[data-baseweb="select"] span {
-    color: var(--ink) !important;
-}
-/* Dropdown menu (the popover list of options) */
-ul[role="listbox"] {
-    background-color: #FFFFFF !important;
-}
-ul[role="listbox"] li {
-    color: var(--ink) !important;
-    background-color: #FFFFFF !important;
-}
-ul[role="listbox"] li:hover {
-    background-color: var(--wheat-pale) !important;
-}
+div[data-baseweb="select"] span { color: var(--ink) !important; }
+ul[role="listbox"] { background-color: #FFFFFF !important; }
+ul[role="listbox"] li { color: var(--ink) !important; background-color: #FFFFFF !important; }
+ul[role="listbox"] li:hover { background-color: var(--wheat-pale) !important; }
 
-/* Sliders (rainfall/temperature what-if) */
 div[data-testid="stSlider"] label {
-    color: var(--ink-soft) !important;
-    font-weight: 600 !important;
-    font-size: 0.85rem !important;
+    color: var(--ink-soft) !important; font-weight: 600 !important; font-size: 0.85rem !important;
 }
-div[data-testid="stSlider"] div[data-baseweb="slider"] {
-    color: var(--wheat-dark) !important;
-}
-div[data-testid="stSliderTickBarMin"],
-div[data-testid="stSliderTickBarMax"] {
-    color: var(--ink-soft) !important;
-}
-/* The little floating value bubble above the slider handle */
 div[data-testid="stThumbValue"] {
-    color: #FFFFFF !important;
-    background-color: var(--ink) !important;
-}
-
-/* Captions (helper text under sliders, map instructions) */
-.stCaption, [data-testid="stCaptionContainer"], small {
-    color: var(--ink-soft) !important;
-    opacity: 1 !important;
-}
-
-/* Expander (Live Context section) */
-div[data-testid="stExpander"] {
-    background-color: #FFFFFF !important;
-    border: 1px solid var(--line) !important;
+    color: #FFFFFF !important; background-color: var(--ink) !important;
     border-radius: 6px !important;
 }
+.stCaption, [data-testid="stCaptionContainer"], small {
+    color: var(--ink-faint) !important; opacity: 1 !important;
+}
+div[data-testid="stExpander"] {
+    background-color: #FFFFFF !important;
+    border: 1px solid var(--line-faint) !important;
+    border-radius: var(--r-md) !important;
+    box-shadow: var(--shadow-xs) !important;
+}
 div[data-testid="stExpander"] summary {
-    color: var(--ink) !important;
-    font-weight: 600 !important;
+    color: var(--ink) !important; font-weight: 600 !important;
     background-color: #FFFFFF !important;
 }
-div[data-testid="stExpander"] summary:hover {
-    color: var(--wheat-dark) !important;
-}
+div[data-testid="stExpander"] summary:hover { color: var(--wheat-dark) !important; }
 div[data-testid="stExpander"] p,
 div[data-testid="stExpander"] span,
-div[data-testid="stExpander"] li {
-    color: var(--ink) !important;
-}
-div[data-testid="stExpander"] a {
-    color: var(--green) !important;
-    text-decoration: underline !important;
-}
-
-/* Links anywhere in markdown */
-.stMarkdown a {
-    color: var(--green) !important;
-    text-decoration: underline !important;
-}
-
-/* Info/warning boxes (st.info, st.warning, st.caption fallbacks) */
-div[data-testid="stAlert"] {
-    background-color: var(--paper-deep) !important;
-}
-div[data-testid="stAlert"] p {
-    color: var(--ink) !important;
-}
-
-/* Code blocks (e.g. in empty-state messages) */
+div[data-testid="stExpander"] li { color: var(--ink) !important; }
+div[data-testid="stExpander"] a { color: var(--green) !important; text-decoration: underline !important; }
+.stMarkdown a { color: var(--green) !important; text-decoration: underline !important; }
+div[data-testid="stAlert"] { background-color: var(--paper-deep) !important; border-radius: var(--r-md) !important; }
+div[data-testid="stAlert"] p { color: var(--ink) !important; }
 code {
     color: var(--alert) !important;
     background-color: var(--wheat-pale) !important;
-    padding: 2px 5px !important;
-    border-radius: 3px !important;
+    padding: 2px 6px !important;
+    border-radius: 5px !important;
+    font-family: 'JetBrains Mono', monospace !important;
 }
 
-/* Ensure our own custom boxes ALWAYS keep their intended text
-   color even with the global override above (which uses !important
-   on everything) - these re-assert color AFTER the global rule
-   because they appear later in the stylesheet */
-.naip-stat-number { color: var(--ink) !important; }
-.naip-stat-label { color: var(--soil) !important; }
-.naip-stat-sub { color: var(--green) !important; }
-.naip-alert-title { color: var(--alert) !important; }
-.naip-safe-title { color: var(--green) !important; }
-.naip-scenario-title { color: var(--wheat-dark) !important; }
+/* Re-assert custom component colors after global override */
+.naip-stat-number   { color: var(--ink) !important; font-family: 'Fraunces', serif !important; }
+.naip-stat-label    { color: var(--ink-faint) !important; }
+.naip-stat-sub      { color: var(--green-mid) !important; }
+.naip-alert-title   { color: var(--alert-mid) !important; }
+.naip-safe-title    { color: var(--green) !important; }
+.naip-scenario-title{ color: var(--wheat-dark) !important; }
 .naip-alert, .naip-alert *  { color: var(--ink) !important; }
-.naip-safe, .naip-safe * { color: var(--ink) !important; }
+.naip-safe, .naip-safe *    { color: var(--ink) !important; }
 .naip-scenario, .naip-scenario * { color: var(--ink) !important; }
-.naip-title { color: var(--ink) !important; }
-.naip-title span { color: var(--wheat-dark) !important; }
-.naip-subtitle { color: var(--soil) !important; }
-.naip-masthead-tag { color: var(--ink-soft) !important; }
-.naip-eyebrow { color: var(--wheat-dark) !important; }
-.naip-panel-district { color: var(--ink) !important; }
-.naip-panel-state { color: var(--soil) !important; }
-.naip-meta { color: var(--ink-soft) !important; }
-.naip-mode-banner { color: var(--ink-soft) !important; }
-.naip-legend { color: var(--ink-soft) !important; }
-.naip-empty-text { color: var(--soil) !important; }
-.shap-label { color: var(--ink) !important; }
-.shap-value { color: var(--soil) !important; }
+.naip-title         { color: #FFFFFF !important; font-family: 'Fraunces', serif !important; }
+.naip-title span    { color: var(--wheat) !important; }
+.naip-subtitle      { color: rgba(255,255,255,0.55) !important; }
+.naip-masthead-tag  { color: rgba(255,255,255,0.4) !important; }
+.naip-eyebrow       { color: var(--wheat-dark) !important; }
+.naip-panel-district{ color: var(--ink) !important; font-family: 'Fraunces', serif !important; }
+.naip-panel-state   { color: var(--soil) !important; }
+.naip-meta          { color: var(--ink-faint) !important; }
+.naip-mode-banner   { color: var(--ink-soft) !important; }
+.naip-mode-banner * { color: var(--ink-soft) !important; }
+.naip-legend        { color: var(--ink-soft) !important; }
+.naip-empty-text    { color: var(--ink-faint) !important; }
+.shap-label         { color: var(--ink-soft) !important; }
+.shap-value         { color: var(--ink-faint) !important; }
+.anna-live-badge, .anna-live-badge * { color: rgba(255,255,255,0.75) !important; }
+.stTabs [data-baseweb="tab"],
+.stTabs [data-baseweb="tab"] * { color: var(--ink-faint) !important; }
+.stTabs [data-baseweb="tab"]:hover,
+.stTabs [data-baseweb="tab"]:hover * { color: var(--wheat-dark) !important; }
+/* Must come after the plain-tab rule above so the active tab's white
+   text wins over the ink-faint default on the same descendants. */
+.stTabs [aria-selected="true"],
+.stTabs [aria-selected="true"] * { color: #FFFFFF !important; }
 </style>
 """
+
 
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
@@ -619,7 +872,7 @@ def render_live_context(state, district, crop, alert_type):
                     This section pulls real-time information on government relief schemes, Minimum
                     Support Prices (MSP), and IMD weather forecasts specific to this district and
                     crop. To enable it, a Tavily API key needs to be configured by the system
-                    administrator &mdash; contact your NAIP support team. The yield predictions and
+                    administrator &mdash; contact your ANNA support team. The yield predictions and
                     district alerts above are unaffected.
                 </div>
             """, unsafe_allow_html=True)
@@ -706,7 +959,7 @@ def load_quantile_models():
     """
     Loads the REAL trained quantile-regression models (10th / 90th
     percentile) that produce the dashboard's published 80% interval
-    coverage (86.6%). Used to give the Current Season Outlook a real
+    coverage (82.1%). Used to give the Current Season Outlook a real
     calibrated range instead of a single point number - this is what
     replaces the old manual what-if sliders as the default uncertainty
     view, per the honest-prediction-model rework.
@@ -735,7 +988,7 @@ xgb_lower_model, xgb_upper_model = load_quantile_models()
 
 # Real calibrated 80% interval for the current 2026 outlook (replaces
 # point-only estimates with an actual probabilistic range, using the
-# SAME quantile models that produced the dashboard's published 86.6%
+# SAME quantile models that produced the dashboard's published 82.1%
 # coverage figure - not an arbitrary slider-driven number).
 if current_preds is not None:
     X_current_all = current_preds[FEATURES].astype(float)
@@ -760,10 +1013,14 @@ IMD_VERIFIED_DATE = "2026-05-29"
 st.markdown("""
     <div class="naip-masthead">
         <div>
-            <div class="naip-title">NAIP <span>/// Agricultural Intelligence</span></div>
-            <div class="naip-subtitle">District Yield Decision Support &middot; Wheat &amp; Rice &middot; Indo-Gangetic Plain</div>
+            <div class="naip-title">ANNA <span>/// Agricultural Nowcasting &amp; Nearly-live Analytics</span></div>
+            <div class="naip-subtitle">अन्न &middot; District Yield Decision Support &middot; Wheat &amp; Rice &middot; Indo-Gangetic Plain</div>
+            <div class="anna-live-badge">
+                <span class="anna-live-dot"></span>
+                Live &mdash; NASA POWER &middot; MODIS NDVI &middot; JRC Surface Water
+            </div>
         </div>
-        <div class="naip-masthead-tag">UP &middot; PUNJAB &middot; HARYANA<br>118 DISTRICTS MONITORED</div>
+        <div class="naip-masthead-tag">UP &middot; PUNJAB &middot; HARYANA<br>118 DISTRICTS<br>40 FEATURES<br>XGBoost v2.0</div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -773,14 +1030,14 @@ st.markdown("""
 
 n_districts = current_preds['district'].nunique() if current_preds is not None else 118
 avg_yield_current = current_preds['current_pred_yield'].mean() if current_preds is not None else 0
-model_r2 = 0.8702  # walk-forward validated; single test-split 2018-19
+model_r2 = 0.8592  # single chronological test-split (2018-19), NOT walk-forward
 
 stat_cols = st.columns(4)
 stats = [
     (f"{n_districts}", "Districts Monitored", "118 across UP &middot; Punjab &middot; Haryana"),
     (f"{avg_yield_current:,.0f}", "Avg. 2026 Wheat Outlook (kg/ha)", "Live model, real 2026 NASA weather"),
-    (f"{model_r2:.3f}", "Model R&sup2;", "Walk-forward validated &middot; range 0.21&ndash;0.93"),
-    ("81.1%", "Interval Coverage", "80% prediction band &middot; target 70&ndash;90%"),
+    (f"{model_r2:.3f}", "Model R&sup2; (2018&ndash;19 test set)", "Walk-forward CV range: 0.19&ndash;0.93"),
+    ("82.1%", "Interval Coverage", "80% prediction band &middot; target 70&ndash;90%"),
 ]
 for col, (num, label, sub) in zip(stat_cols, stats):
     col.markdown(f"""
@@ -943,8 +1200,14 @@ with tab_watch:
                         render_shap_bars(shap_df_w, shap_df_w['abs_val'].max())
 
                     st.markdown('<div class="naip-eyebrow" style="margin-top:18px;">Recommended Actions</div>', unsafe_allow_html=True)
+                    # Uses this district's REAL calibrated 80% interval (already
+                    # computed for current_preds via the quantile models) instead
+                    # of a fabricated +/-15% band, so the "wide interval, verify
+                    # before acting" flag reflects genuine model uncertainty.
+                    watch_lower = wrow['pred_lower_2026'] if 'pred_lower_2026' in wrow.index and pd.notna(wrow['pred_lower_2026']) else wrow['current_pred_yield'] * 0.85
+                    watch_upper = wrow['pred_upper_2026'] if 'pred_upper_2026' in wrow.index and pd.notna(wrow['pred_upper_2026']) else wrow['current_pred_yield'] * 1.15
                     render_advisory(generate_advisory(
-                        wrow, wrow['current_pred_yield'] * 0.85, wrow['current_pred_yield'] * 1.15, wrow['current_pred_yield']
+                        wrow, watch_lower, watch_upper, wrow['current_pred_yield']
                     ))
 
                     alert_type_w = 'drought' if wrow.get('drought_flag', 0) == 1 else 'flood' if wrow.get('flood_flag', 0) == 1 else 'general'
@@ -1140,10 +1403,6 @@ with tab_hist:
             empty_state("🌾", "Click any district marker on the map<br>to see its yield prediction and explanation.")
 
 # =================================================================
-# MODE 2 — CURRENT SEASON OUTLOOK (real 2026 weather)
-# =================================================================
-
-# =================================================================
 # TAB 3 — CURRENT SEASON OUTLOOK (real 2026 weather, real interval)
 # =================================================================
 
@@ -1231,8 +1490,11 @@ with tab_current:
                     """, unsafe_allow_html=True)
                     st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
 
+                    # Uses the district's REAL calibrated 80% interval instead
+                    # of a fabricated +/-15% band, so the interval-width-based
+                    # "verify before acting" flag reflects genuine uncertainty.
                     render_advisory(generate_advisory(
-                        crow, crow['current_pred_yield'] * 0.85, crow['current_pred_yield'] * 1.15, crow['current_pred_yield']
+                        crow, crow['pred_lower_2026'], crow['pred_upper_2026'], crow['current_pred_yield']
                     ))
 
                     alert_type_2 = 'drought' if crow.get('drought_flag', 0) == 1 else 'flood' if crow.get('flood_flag', 0) == 1 else 'general'
@@ -1315,7 +1577,12 @@ with tab_scenario:
 
             live_features = crow[FEATURES].copy().astype(float)
             rain_cols = [c for c in FEATURES if 'rainfall' in c or 'water_balance' in c]
-            temp_cols = [c for c in FEATURES if 'temp' in c or 'gdd' in c]
+            # Includes heat_stress_days / frost_risk_days, which are
+            # temperature-derived features but don't contain 'temp' or
+            # 'gdd' in their name - without this they'd stay frozen at
+            # baseline while the temperature slider moves, making the
+            # SHAP explanation inconsistent with the scenario applied.
+            temp_cols = [c for c in FEATURES if 'temp' in c or 'gdd' in c or c in ('heat_stress_days', 'frost_risk_days')]
             for c in rain_cols:
                 if c in live_features.index:
                     live_features[c] = live_features[c] * (1 + rainfall_adj / 100)
@@ -1376,18 +1643,21 @@ with tab_scenario:
 with tab_about:
     st.markdown("""
         <div class="naip-mode-banner">
-            <b>National Agricultural Intelligence Platform (NAIP)</b> — a district-level crop yield prediction
-            and decision-support system for agricultural officers across Haryana, Punjab, and Uttar Pradesh.
+            <b>ANNA — Agricultural Nowcasting and Nearly-live Analytics</b><br>
+            <i>अन्न (Anna)</i> — Sanskrit for "food" or "grain". The Taittiriya Upanishad declares
+            <i>Annam Brahma</i> — "food is divine". A system that predicts food availability at the
+            district level, named after the oldest Sanskrit word for crop itself.
         </div>
     """, unsafe_allow_html=True)
 
-    st.markdown('<div class="naip-eyebrow">What this system does</div>', unsafe_allow_html=True)
+    st.markdown('<div class="naip-eyebrow">What ANNA does</div>', unsafe_allow_html=True)
     st.markdown("""
-NAIP uses a machine learning model (tuned XGBoost, R²=0.87 on held-out test data) to predict wheat and
-rice yields at the district level, one season ahead. It combines three data sources:
+ANNA uses a machine learning model (tuned XGBoost, R²=0.8592 on a held-out chronological test set) to predict
+wheat and rice yields at the district level, one season ahead. It combines four live and historical data sources:
 
-- **NASA POWER satellite weather** — daily rainfall, temperature, humidity, and solar radiation, updated within ~3 days of real time
-- **MODIS satellite NDVI** — a direct measure of vegetation health from space, updated every 16 days via Google Earth Engine
+- **NASA POWER satellite weather** — daily rainfall, temperature, humidity, and solar radiation, updated within ~3 days of real time. Engineered into agronomic features: GDD, dry-spell duration, water balance, rainfall concentration.
+- **MODIS satellite NDVI** — a direct measure of vegetation health from space (250m, 16-day), via Google Earth Engine
+- **JRC Global Surface Water** — surface water body and reservoir availability per district (30m, annual), via Google Earth Engine
 - **Government crop yield records** — 22 years (1997–2019) of district-level published data used to train the model
     """)
 
@@ -1395,25 +1665,28 @@ rice yields at the district level, one season ahead. It combines three data sour
     st.markdown("""
 - **Districts Requiring Attention** — your starting point. Shows which districts have meaningfully changed since the last check, ranked by severity. No input needed.
 - **Kharif 2026 Early Warning** — an honest risk flag (not a yield number) for the current monsoon season, based on real rainfall-so-far vs. each district's own history.
-- **Current Season Outlook** — the model's live Wheat 2026 prediction for every district, with a calibrated uncertainty range.
-- **Historical Results** — model predictions vs. actual government yields for 2018–19. This is the proof the model works, not a current forecast.
+- **Current Season Outlook** — ANNA's live Wheat 2026 prediction for every district, with a calibrated 80% uncertainty range.
+- **Historical Results** — model predictions vs. actual government yields for 2018–19. This is the proof ANNA works, not a current forecast.
 - **Scenario Explorer** — adjust rainfall and temperature from the real 2026 baseline to test what-if questions before making procurement or insurance decisions.
     """)
 
     st.markdown('<div class="naip-eyebrow">Honest limitations</div>', unsafe_allow_html=True)
     st.markdown("""
-- **Yield trend data lags by ~5 years.** Government district-level statistics are published with a 1–2 year delay. The model's trend signal refers to 2019, not 2025. This is a universal constraint shared by all published systems in India.
-- **Model accuracy varies by year.** Walk-forward validation shows R² ranging from 0.21 to 0.93 across years — the headline 0.87 is from a favorable test window. Some years are harder to predict than others.
-- **Interval calibration degrades at high predicted yields.** For the top 20% of predictions, the 80% interval only captures ~63% of actual outcomes. Verify high-yield predictions with field data before acting on them.
-- **Rice yield prediction is unavailable mid-season.** A yield number for rice before harvest would be overclaiming. The Kharif tab provides an honest risk flag instead.
+- **Yield trend data lags by ~5 years.** Government district-level statistics are published with a 1–2 year delay. ANNA's trend signal refers to 2019, not 2025. This is a universal constraint shared by all published systems in India.
+- **Model accuracy varies by year.** Walk-forward validation shows R² ranging from 0.19 to 0.93 across years — the headline R²=0.8592 is from a chronological 2018–19 test set. Some years are harder to predict than others.
+- **Interval calibration degrades at high predicted yields.** For the top 20% of predictions, the 80% interval captures only ~63% of actual outcomes. Verify high-yield predictions with field data before acting on them.
+- **Rice yield prediction is unavailable mid-season.** A yield number for rice before harvest would be overclaiming. The Kharif tab provides an honest risk classification instead.
+- **Surface water uses 2021 as current baseline.** JRC dataset has no 2022+ coverage yet.
     """)
 
     st.markdown('<div class="naip-eyebrow">Data & credits</div>', unsafe_allow_html=True)
     st.markdown("""
 - Weather: NASA POWER (power.larc.nasa.gov)
 - Satellite NDVI: NASA MODIS MOD13Q1 via Google Earth Engine
-- Crop yield training data: Indian Government agricultural statistics (1997–2019)
-- Built with: Python · XGBoost · SHAP · Streamlit · Folium
+- Surface water: JRC Global Surface Water (Pekel et al. 2016, Nature) via GEE
+- Groundwater: Kuruva et al. (2025), Nature Scientific Data, DOI: 10.1038/s41597-025-05899-5
+- Crop yield training data: Government of India, Ministry of Agriculture (1997–2019)
+- Built with: Python · XGBoost · SHAP · Streamlit · FastAPI · Folium
     """)
 
 # ---------------------------------------------------------------
@@ -1423,7 +1696,10 @@ rice yields at the district level, one season ahead. It combines three data sour
 st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
 st.markdown("""
     <div class="naip-meta">
-        NAIP v2.0 &middot; Model: XGBoost (tuned, 38 features) &middot; R&sup2;: 0.8702 &middot; Walk-forward CV: 0.21&ndash;0.93 &middot; Interval coverage: 81.1%<br>
-        Data: NASA POWER &middot; MODIS NDVI (GEE) &middot; India Agriculture Crop Production &middot; Geocoding: Nominatim/OpenStreetMap
+        ANNA v2.0 &middot; Agricultural Nowcasting and Nearly-live Analytics &middot;
+        Model: XGBoost (tuned, 40 features) &middot; R&sup2;: 0.8592 (2018&ndash;19 test set) &middot;
+        Walk-forward CV: 0.19&ndash;0.93 &middot; Interval coverage: 82.1%<br>
+        Data: NASA POWER &middot; MODIS NDVI (GEE) &middot; JRC Surface Water (GEE) &middot;
+        India Agriculture Crop Production &middot; Kuruva et al. 2025 (Nature Scientific Data)
     </div>
 """, unsafe_allow_html=True)
