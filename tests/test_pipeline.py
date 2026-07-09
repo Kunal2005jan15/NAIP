@@ -220,6 +220,53 @@ def _path(rel):
     return os.path.join(REPO_ROOT, rel)
 
 
+# =============================================================
+# BUG #6: Kharif window frozen at "June" past month-end (script 32)
+# =============================================================
+# Found 2026-07-07: the window was hardcoded to `month == 6` in both
+# the current-season filter and the historical filter, with the
+# cutoff taken as a bare day-of-month. Once real data crosses into
+# July, a July day-of-month gets misapplied as if it were a June day
+# (or July data is silently excluded). Must stay in sync with
+# src/32_kharif_early_warning.py's season_day_offset().
+
+def season_day_offset(dt, year):
+    """Reimplements script 32's day-offset-from-June-1 logic exactly."""
+    june1 = pd.Timestamp(f"{year}-06-01")
+    return (pd.Timestamp(dt) - june1).days
+
+
+class TestKharifSeasonWindow:
+    """Regression tests for the June-frozen date window bug (Bug #6)."""
+
+    def test_june_23_offset_is_22(self):
+        assert season_day_offset("2026-06-23", 2026) == 22
+
+    def test_july_07_offset_crosses_month_boundary_correctly(self):
+        # This is the exact failure mode: July 7 must be treated as
+        # 36 days into the season (June has 30 days), NOT as "day 7"
+        # of a June-only window.
+        assert season_day_offset("2026-07-07", 2026) == 36
+
+    def test_july_07_is_not_misread_as_early_june(self):
+        offset = season_day_offset("2026-07-07", 2026)
+        assert offset > 30, (
+            "July 7 produced a season-day-offset <= 30 - this is the exact "
+            "Bug #6 shape: a July date being misclassified as still within June."
+        )
+
+    def test_october_end_of_kharif_offset(self):
+        # Sanity check the far end of the season doesn't overflow/break.
+        assert season_day_offset("2026-10-31", 2026) == 152
+
+    def test_window_label_spans_months_when_appropriate(self):
+        # Reimplements the window_label construction from script 32.
+        latest_date = pd.Timestamp("2026-07-07")
+        window_label = f"Jun 1\u2013{latest_date.strftime('%b %d')}"
+        assert window_label == "Jun 1\u2013Jul 07"
+        assert "Jun" in window_label and "Jul" in window_label
+
+
 class TestModelSchemaConsistency:
     """Regression tests for the stale quantile-model bug (Bug #2)."""
 

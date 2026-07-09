@@ -16,6 +16,7 @@ import requests
 import pandas as pd
 import time
 import os
+from datetime import datetime, timedelta
 
 os.makedirs("data/raw", exist_ok=True)
 
@@ -25,7 +26,17 @@ print(f"Estimated time: ~{len(districts) * 2 / 60:.1f} minutes")
 
 PARAMETERS = "PRECTOTCORR,T2M_MAX,T2M_MIN,T2M,RH2M,ALLSKY_SFC_SW_DWN"
 START_YEAR = "2020"
-END_YEAR   = "2026"  # NASA POWER updates with ~a few days lag
+
+# BUG FIX (2026-07-07): this used to be a hardcoded end="20260623" - frozen at
+# whatever date it happened to be written on. That meant re-running this script
+# NEVER advanced past June 23, 2026, no matter what day it was actually run on -
+# not a Task Scheduler problem, not a NASA POWER lag, just a literal frozen date
+# baked into the request. Fixed to compute "today" dynamically, with a 3-day
+# buffer since NASA POWER's near-real-time data typically lags a few days behind
+# the actual current date (their own processing latency, not a bug on our side).
+NASA_POWER_LAG_DAYS = 3
+END_DATE = (datetime.now() - timedelta(days=NASA_POWER_LAG_DAYS)).strftime("%Y%m%d")
+print(f"Fetching through {END_DATE} (today minus {NASA_POWER_LAG_DAYS}-day NASA POWER lag buffer)")
 
 def fetch_nasa_power(district_name, state, lat, lon):
     url = "https://power.larc.nasa.gov/api/temporal/daily/point"
@@ -35,7 +46,7 @@ def fetch_nasa_power(district_name, state, lat, lon):
         "longitude":  lon,
         "latitude":   lat,
         "start":      f"{START_YEAR}0101",
-        "end":        f"{END_YEAR}0623",   # up to "today" in-story
+        "end":        END_DATE,
         "format":     "JSON"
     }
     try:

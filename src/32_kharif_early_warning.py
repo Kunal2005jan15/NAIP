@@ -59,16 +59,48 @@ train_history = pd.read_csv('data/processed/model_ready_v2.csv')
 # THE FIX: compare this year's actual partial total against the SAME
 # CALENDAR WINDOW in prior years (apples-to-apples), instead of pacing
 # it across the full season and comparing to a full-season baseline.
+#
+# BUG FIX (2026-07-07): the window was previously hardcoded to
+# `month == 6` in both the current-season filter and the historical
+# filter, and the cutoff was taken as `.day` (day-of-month) alone.
+# Once the season crosses into July, this breaks two ways: (1) the
+# `month == 6` filter silently excludes any July+ data even if it
+# exists, so the reported window can never advance past June, and
+# (2) a July day-of-month (e.g. 7) gets misapplied as if it were a
+# June day-of-month, producing a nonsensical "June 1-7" label on a
+# date that's actually July 7. Fixed by computing everything as a
+# DAY-OFFSET FROM JUNE 1 (season day-of-year), which is continuous
+# across the June->July->...->October Kharif season regardless of
+# which calendar month "today" falls in.
 
-KHARIF_WINDOW_END_MONTH = current_weather[
-    (current_weather['year'] == 2026) & (current_weather['month'] >= 6) &
+KHARIF_SEASON_START_MONTH = 6  # June 1 = day 0 of the Kharif season
+
+def season_day_offset(dt_series, year_series):
+    """Days elapsed since June 1 of the same year (0-indexed). Works
+    across month boundaries (June through October)."""
+    june1 = pd.to_datetime(year_series.astype(str) + '-06-01')
+    return (dt_series - june1).dt.days
+
+current_weather['season_day'] = season_day_offset(current_weather['date'], current_weather['year'])
+
+# Latest available date in the 2026 Kharif season (June 1 onward), whatever
+# month it actually falls in - this is the real "today" of the data feed.
+latest_2026_date = current_weather[
+    (current_weather['year'] == 2026) & (current_weather['season_day'] >= 0) &
     (current_weather['rainfall_mm'].notna())
 ]['date'].max()
-window_day_cutoff = KHARIF_WINDOW_END_MONTH.day if pd.notna(KHARIF_WINDOW_END_MONTH) else None
+
+if pd.isna(latest_2026_date):
+    raise SystemExit("No valid 2026 Kharif-season rainfall data found (season_day >= 0). "
+                      "Check that data/raw/weather_current_2020_2026_CLEAN.csv has been refreshed.")
+
+season_day_cutoff = (latest_2026_date - pd.Timestamp(f"2026-{KHARIF_SEASON_START_MONTH:02d}-01")).days
+window_label = f"Jun 1\u2013{latest_2026_date.strftime('%b %d')}"  # e.g. "Jun 1-Jul 07"
 
 kharif_2026_so_far = current_weather[
-    (current_weather['year'] == 2026) & (current_weather['month'] == 6) &
-    (current_weather['date'].dt.day <= window_day_cutoff) & (current_weather['rainfall_mm'].notna())
+    (current_weather['year'] == 2026) &
+    (current_weather['season_day'] >= 0) & (current_weather['season_day'] <= season_day_cutoff) &
+    (current_weather['rainfall_mm'].notna())
 ]
 
 partial_rainfall = kharif_2026_so_far.groupby(['state', 'district']).agg(
@@ -78,18 +110,19 @@ partial_rainfall = kharif_2026_so_far.groupby(['state', 'district']).agg(
 
 print(f"Partial Kharif 2026 data: {len(partial_rainfall)} districts, "
       f"{partial_rainfall['days_elapsed'].iloc[0]} days elapsed so far "
-      f"(June 1-{window_day_cutoff})")
+      f"({window_label}, as of latest available date {latest_2026_date.date()})")
 
 # ---------------------------------------------------------------
-# STEP 2: SAME-CALENDAR-WINDOW historical rainfall (June 1 - same
-# day-of-month) for each district, using 2020-2025 (whatever years
-# are available in the current-weather feed - NOT the older
-# 1997-2019 yield-modeling history, which has no daily resolution).
+# STEP 2: SAME-CALENDAR-WINDOW historical rainfall (June 1 through the
+# same season-day-offset, which may span into July/August/etc.) for
+# each district, using 2020-2025 (whatever years are available in the
+# current-weather feed - NOT the older 1997-2019 yield-modeling
+# history, which has no daily resolution).
 # ---------------------------------------------------------------
 
 hist_window = current_weather[
     (current_weather['year'] < 2026) & (current_weather['year'] >= 2020) &
-    (current_weather['month'] == 6) & (current_weather['date'].dt.day <= window_day_cutoff)
+    (current_weather['season_day'] >= 0) & (current_weather['season_day'] <= season_day_cutoff)
 ]
 
 hist_window_by_year = hist_window.groupby(['year', 'state', 'district']).agg(
@@ -144,11 +177,19 @@ merged['kharif_risk_zscore'] = (
 )
 merged['kharif_risk_level'] = merged.apply(classify_risk, axis=1)
 
+# How many days behind "today" the data actually is, right now - computed from
+# the real data, not assumed from script 22's fetch-time buffer setting (that
+# buffer is a REQUEST parameter; this is what we actually got back, which can
+# differ if NASA POWER's lag varies day to day).
+observed_lag_days = (pd.Timestamp.now().normalize() - latest_2026_date).days
+
 merged['risk_explanation'] = merged.apply(lambda r: (
-    f"{r['actual_partial_rainfall_mm']:.0f}mm so far this June (days 1-{window_day_cutoff}) vs. "
+    f"{r['actual_partial_rainfall_mm']:.0f}mm so far this Kharif season ({window_label}) vs. "
     f"{r['window_hist_mean']:.0f}mm average for this same period in {int(r['n_years'])} prior years. "
     f"IMD's national outlook for the full season is {IMD_2026_LPA_PCT}% of LPA "
-    f"({int(IMD_DEFICIENT_PROB*100)}% chance deficient) - context, not blended into this number."
+    f"({int(IMD_DEFICIENT_PROB*100)}% chance deficient) - context, not blended into this number. "
+    f"Note: data currently runs {observed_lag_days} day(s) behind today (NASA POWER processing lag) - "
+    f"this does not yet reflect the most recent rainfall, which can matter a lot during an active spell."
 ) if pd.notna(r['window_hist_mean']) and r['n_years'] >= MIN_YEARS_REQUIRED
     else "Insufficient same-window historical baseline (fewer than 3 prior years) for this district.", axis=1)
 

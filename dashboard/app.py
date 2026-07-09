@@ -1249,7 +1249,7 @@ with tab_kharif:
         st.markdown(f"""
             <div class="naip-mode-banner">
                 <b>{season_label}</b> &mdash; {season_note}<br><br>
-                <b>What this tab shows:</b> Each district's actual rainfall recorded so far this June compared
+                <b>What this tab shows:</b> Each district's actual rainfall recorded so far this Kharif season compared
                 to that SAME calendar window in 2020&ndash;2025 &mdash; an honest like-for-like comparison,
                 not a linear extrapolation. For context (not blended into the number): IMD's official national
                 outlook is {IMD_2026_LPA_PCT}% of the Long Period Average, with a {IMD_DEFICIENT_PROB_PCT}%
