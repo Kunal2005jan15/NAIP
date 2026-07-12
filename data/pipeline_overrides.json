@@ -1,0 +1,12 @@
+{
+  "_readme": "Overrides for src/33_pipeline_sanity_checks.py. Each entry MUST have a reason, evidence, diagnosed_date, and an expires date no more than 14 days out. When expires passes, the check goes back to FAILING automatically - re-diagnose and either renew (with a NEW expiry, not just re-copying the old one blindly) or let it fail if it's no longer valid. This file is deliberately version-controlled and part of the audit trail: it's a record of every time a human overrode the gate, not a way to silence it quietly.",
+
+  "kharif_high_concentration": {
+    "reason": "As of 2026-07-08, 88-91% of districts classified 'high' risk. Confirmed NOT the Kharif pacing bug via 3 independent checks: (1) days_elapsed varies by only 1 day across all 118 districts, ruling out a coverage-gap bias; (2) z-score distribution has real spread (std~0.6-0.7, not degenerate); (3) independent news (IMD's July 7 PMO briefing, Skymet, Tribune) confirms a genuinely severe, real 2026 monsoon delay - June 2026 was the driest June in 12 years nationally, and Tribune's July 6 district bulletin specifically lists Ambala (this system's most severe district) as having received no rain that week. UPDATE 2026-07-11: the underlying rainfall deficit has since improved (top category now 79%, below the 85% threshold) - this override is kept active through its original expiry as a historical record, but is no longer being actively triggered.",
+    "evidence": "https://www.tribuneindia.com/news/india/monsoon-deficit-at-12-despite-delayed-onset-imd-tells-pmo/ ; https://www.tribuneindia.com/news/punjab/punjab-haryana-brace-for-wet-week-ahead-as-imd-predicts-heavy-rain-till-july-12/",
+    "caveat": "Magnitude was likely somewhat overstated relative to reality at the time: NASA POWER's ~3-day processing lag meant the window didn't yet reflect the early-July rain recovery IMD's July 7 briefing already reported. Direction (severe, real, below-normal) was trustworthy; exact per-district z-scores should have been read as 'confirmed bad, exact severity uncertain.'",
+    "diagnosed_by": "Kunal, with Claude",
+    "diagnosed_date": "2026-07-08",
+    "expires": "2026-07-15"
+  }
+}

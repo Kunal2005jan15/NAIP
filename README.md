@@ -165,7 +165,7 @@ Deployment: Docker → Azure Container Registry → Azure Kubernetes Service
 
 ## Engineering Audit Trail
 
-This project treats every real defect found — during development *and* after deployment — as documentation, not something to quietly patch and forget. **10 real bugs** found so far, all covered by the regression suite:
+This project treats every real defect found — during development *and* after deployment — as documentation, not something to quietly patch and forget. **11 real bugs** found so far, all covered by the regression suite:
 
 | # | Bug | Symptom | Root Cause | Fix |
 |---|---|---|---|---|
@@ -179,6 +179,7 @@ This project treats every real defect found — during development *and* after d
 | 8 | `/districts` returning the wrong count | API returned 133 districts instead of the 118 actually modeled | Endpoint read the raw pre-filter district list, not the post-modeling set | Read from `current_predictions_2026.csv`'s actual district set instead |
 | 9 | RAG panel silently vanishing | "Live Context" section simply didn't render, no error shown | `tavily-python` missing from `requirements.txt` — an indented, `try/except`-guarded import invisible to a naive top-level-only import scan | Added `tavily-python` to requirements; audited for other indented imports |
 | 10 | Orchestrator's gate-detection broke by position | Adding a step after the sanity gate would have silently misreported gate failures as generic crashes | `is_last = (i == len(PIPELINE_STEPS))` identified the sanity gate by array position, not identity | Identify the gate step by name (`'pipeline_sanity_checks' in step`) instead |
+| 11 | Single-district fetch failure masquerading as a real alert | A transient NASA POWER timeout for one district (Karnal, 2026-07-11) produced zero weather rows for that district only, which propagated three steps downstream into a spurious -730 kg/ha "urgent" District Watch alert — plus a *separate*, misleading sanity-gate false positive claiming the classifier itself was broken, when it had actually already correctly isolated the one real outlier | No retry on transient fetch errors; `weather_current_failures.csv` was logged but nothing ever read it; the diversity check compared dataset-wide variance instead of checking whether that variance was already correctly isolated outside the top category | Added retry-with-backoff to the NASA POWER fetch; added a new Check 5 that explicitly surfaces per-district fetch failures at the source; refined Check 2 to distinguish "real variance hidden inside the top category" (genuine bug) from "an outlier already correctly excluded from it" (working as designed) |
 
 ### Case Study: The Kharif 2026 Investigation
 

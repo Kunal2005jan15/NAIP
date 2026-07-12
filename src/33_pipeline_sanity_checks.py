@@ -26,6 +26,8 @@ import numpy as np
 import pickle
 import os
 import sys
+import json
+from datetime import date
 
 FAILURES = []
 WARNINGS = []
@@ -40,6 +42,49 @@ def warn(msg):
 
 def ok(msg):
     print(f"  [OK]   {msg}")
+
+# ---------------------------------------------------------------
+# OVERRIDE MECHANISM (built 2026-07-08, delivered 2026-07-11 - this
+# existed and was tested but was never actually shipped in an earlier
+# handoff; fixing that gap now)
+# ---------------------------------------------------------------
+# A gate that never has an escape hatch just gets silently disabled by
+# whoever gets tired of it - usually by commenting out the whole check,
+# which loses the check FOREVER, not just for the diagnosed incident.
+# This gives a narrower, audited, self-expiring alternative: a human can
+# mark ONE specific finding as manually diagnosed-and-real, with a reason
+# and evidence, but it automatically stops applying after `expires` - so
+# a genuinely NEW bug that produces the same shape later can't hide
+# behind a stale override.
+
+OVERRIDES_PATH = 'data/pipeline_overrides.json'
+
+def get_active_override(check_id):
+    """Returns the override dict if check_id has a non-expired override, else None."""
+    if not os.path.exists(OVERRIDES_PATH):
+        return None
+    with open(OVERRIDES_PATH) as f:
+        overrides = json.load(f)
+    entry = overrides.get(check_id)
+    if entry is None:
+        return None
+    expires = date.fromisoformat(entry['expires'])
+    if date.today() > expires:
+        warn(f"Override for '{check_id}' EXPIRED on {entry['expires']} - re-diagnose before "
+             f"trusting this again. (Was: {entry['reason'][:100]}...)")
+        return None
+    return entry
+
+def fail_or_override(check_id, msg):
+    """Like fail(), but downgrades to a visible WARN if an active, non-expired
+    override exists for this check_id. Never silent either way."""
+    override = get_active_override(check_id)
+    if override:
+        warn(f"{msg}\n         >>> OVERRIDDEN (expires {override['expires']}): {override['reason']}\n"
+             f"         >>> Caveat: {override.get('caveat', 'none stated')}\n"
+             f"         >>> Evidence: {override.get('evidence', 'none stated')}")
+    else:
+        fail(msg)
 
 
 print("=" * 60)
@@ -173,6 +218,27 @@ for path, col, label, magnitude_col in DIVERSITY_CHECKS:
                  f"src/28_district_watch.py to re-baseline against the current model.")
             continue
 
+        # REFINEMENT 3 (2026-07-11): a large OVERALL std/range can come entirely
+        # from rows that are ALREADY correctly excluded from the top category -
+        # e.g. one genuine outlier district correctly flagged 'urgent' while the
+        # other 117 are genuinely, identically unchanged. That's the classifier
+        # working correctly, not the bug shape. The real bug shape is variance
+        # HIDDEN INSIDE the top category itself (real differences the classifier
+        # failed to separate out). Check that specifically, not just the
+        # dataset-wide std/range, which conflates these two very different cases.
+        top_category_mask = df[col] == counts.index[0]
+        within_top_std = df.loc[top_category_mask, magnitude_col].std()
+        within_top_range = (df.loc[top_category_mask, magnitude_col].max() -
+                             df.loc[top_category_mask, magnitude_col].min())
+        if within_top_std < 20 and within_top_range < 100:
+            n_outliers = (~top_category_mask).sum()
+            ok(f"{label}: {top_share:.0%} in '{counts.index[0]}', but that category itself is "
+               f"genuinely homogeneous (within-category std={within_top_std:.1f}, "
+               f"range={within_top_range:.1f}). The dataset-wide variance (std={mag_std:.1f}) "
+               f"comes entirely from {n_outliers} row(s) ALREADY correctly excluded into other "
+               f"categories - the classifier is working, not hiding anything. Not flagging.")
+            continue
+
         fail(f"{label}: {top_share:.0%} of {len(df)} rows fall into a single category "
              f"('{counts.index[0]}'), but the underlying '{magnitude_col}' has REAL variance "
              f"(std={mag_std:.1f}, range={mag_range:.1f}). This is the Kharif-bug SHAPE: real "
@@ -180,10 +246,13 @@ for path, col, label, magnitude_col in DIVERSITY_CHECKS:
              f"the threshold/comparison logic before trusting this output.")
         continue
 
-    fail(f"{label}: {top_share:.0%} of {len(df)} rows fall into a single category "
-         f"('{counts.index[0]}'). This is the EXACT shape of the Kharif pacing bug - "
-         f"a near-uniform classification almost always means a structurally biased "
-         f"comparison, not a real finding. Diagnose before trusting this output.")
+    fail_or_override(
+        "kharif_high_concentration",
+        f"{label}: {top_share:.0%} of {len(df)} rows fall into a single category "
+        f"('{counts.index[0]}'). This is the EXACT shape of the Kharif pacing bug - "
+        f"a near-uniform classification almost always means a structurally biased "
+        f"comparison, not a real finding. Diagnose before trusting this output."
+    )
 
 
 print("\n" + "=" * 60)
@@ -249,6 +318,34 @@ for path in REQUIRED_FILES:
         fail(f"Required file is empty: {path}")
     else:
         ok(f"Present: {path}")
+
+
+print("\n" + "=" * 60)
+print("CHECK 5: Per-district weather fetch completeness")
+print("=" * 60)
+# BUG FIX (2026-07-11): a single-district NASA POWER timeout (Karnal, this date)
+# silently produced zero 2026 weather rows for that district only. Nothing failed
+# loudly - it propagated three steps downstream into a spurious "urgent" District
+# Watch alert that looked like a real agronomic emergency but was actually a
+# missing-data artifact. script 22 already logs failures to
+# weather_current_failures.csv but nothing previously READ that file. This check
+# closes that gap: surface fetch failures explicitly and immediately, at the
+# actual source, instead of letting them masquerade as something else three
+# steps downstream.
+FAILURE_LOG = 'data/raw/weather_current_failures.csv'
+if os.path.exists(FAILURE_LOG) and os.path.getsize(FAILURE_LOG) > 0:
+    fetch_failures = pd.read_csv(FAILURE_LOG)
+    if len(fetch_failures) > 0:
+        districts_str = ', '.join(f"{r.district} ({r.state})" for r in fetch_failures.itertuples())
+        fail(f"{len(fetch_failures)} district(s) had a weather fetch failure this run and have "
+             f"ZERO current-season weather rows: {districts_str}. Any prediction/alert for "
+             f"these specific districts this run is likely a missing-data artifact, not a real "
+             f"signal - re-run src/22_fetch_current_weather.py, or at minimum treat their "
+             f"District Watch / Kharif entries as unreliable until re-fetched.")
+    else:
+        ok("weather_current_failures.csv exists but is empty - no fetch failures this run")
+else:
+    ok("No weather fetch failures this run (all districts returned data)")
 
 
 print("\n" + "=" * 60)

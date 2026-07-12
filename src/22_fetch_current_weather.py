@@ -38,7 +38,7 @@ NASA_POWER_LAG_DAYS = 3
 END_DATE = (datetime.now() - timedelta(days=NASA_POWER_LAG_DAYS)).strftime("%Y%m%d")
 print(f"Fetching through {END_DATE} (today minus {NASA_POWER_LAG_DAYS}-day NASA POWER lag buffer)")
 
-def fetch_nasa_power(district_name, state, lat, lon):
+def fetch_nasa_power(district_name, state, lat, lon, max_retries=3):
     url = "https://power.larc.nasa.gov/api/temporal/daily/point"
     params = {
         "parameters": PARAMETERS,
@@ -49,30 +49,44 @@ def fetch_nasa_power(district_name, state, lat, lon):
         "end":        END_DATE,
         "format":     "JSON"
     }
-    try:
-        response = requests.get(url, params=params, timeout=60)
-        if response.status_code != 200:
-            return None, f"HTTP {response.status_code}"
-        data = response.json()
-        daily_data = data["properties"]["parameter"]
-        df = pd.DataFrame(daily_data)
-        df.index = pd.to_datetime(df.index, format="%Y%m%d")
-        df.index.name = "date"
-        df["district"] = district_name
-        df["state"]    = state
-        df["lat"]      = lat
-        df["lon"]      = lon
-        df = df.rename(columns={
-            "PRECTOTCORR":        "rainfall_mm",
-            "T2M_MAX":            "temp_max_c",
-            "T2M_MIN":            "temp_min_c",
-            "T2M":                "temp_avg_c",
-            "RH2M":               "humidity_pct",
-            "ALLSKY_SFC_SW_DWN":  "solar_radiation"
-        })
-        return df, None
-    except Exception as e:
-        return None, str(e)
+    # BUG FIX (2026-07-11): a single transient timeout on ONE district (Karnal,
+    # 2026-07-11 run) silently produced zero 2026 weather rows for that district
+    # only. Nothing failed loudly - it just propagated three steps downstream into
+    # a spurious -730 kg/ha "urgent" District Watch alert, which looked like a real
+    # agronomic emergency but was actually a missing-data artifact. A timeout is
+    # exactly the kind of transient error a retry usually resolves - so retry
+    # before giving up, rather than letting one bad network moment silently corrupt
+    # one district's entire current-season prediction.
+    last_error = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.get(url, params=params, timeout=60)
+            if response.status_code != 200:
+                last_error = f"HTTP {response.status_code}"
+                continue
+            data = response.json()
+            daily_data = data["properties"]["parameter"]
+            df = pd.DataFrame(daily_data)
+            df.index = pd.to_datetime(df.index, format="%Y%m%d")
+            df.index.name = "date"
+            df["district"] = district_name
+            df["state"]    = state
+            df["lat"]      = lat
+            df["lon"]      = lon
+            df = df.rename(columns={
+                "PRECTOTCORR":        "rainfall_mm",
+                "T2M_MAX":            "temp_max_c",
+                "T2M_MIN":            "temp_min_c",
+                "T2M":                "temp_avg_c",
+                "RH2M":               "humidity_pct",
+                "ALLSKY_SFC_SW_DWN":  "solar_radiation"
+            })
+            return df, None
+        except Exception as e:
+            last_error = str(e)
+            if attempt < max_retries:
+                time.sleep(3 * attempt)  # 3s, then 6s - brief backoff, not aggressive
+    return None, f"{last_error} (failed after {max_retries} attempts)"
 
 all_data = []
 failed = []
