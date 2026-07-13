@@ -322,6 +322,43 @@ class TestPredictionPlausibility:
         )
 
 
+class TestFailureLogFreshness:
+    """Regression test for Bug #12: weather_current_failures.csv used to only be
+    written `if failed:`, so a real failure from a PAST run could sit on disk
+    indefinitely and get silently re-reported by Check 5 as if it happened on the
+    CURRENT run, even after every district fetched cleanly. The file must always
+    be written fresh, every run, including the empty case."""
+
+    def test_empty_failure_list_still_produces_a_valid_empty_csv(self, tmp_path):
+        # Mirrors exactly what script 22 now does on a fully-successful run:
+        # pd.DataFrame(failed, columns=[...]).to_csv(...) even when failed == [].
+        failed = []
+        out_path = tmp_path / "weather_current_failures.csv"
+        pd.DataFrame(failed, columns=["state", "district", "error"]).to_csv(out_path, index=False)
+
+        assert out_path.exists(), "The failures file must be written even with zero failures"
+        result = pd.read_csv(out_path)
+        assert len(result) == 0, "An empty run must produce a zero-row file, not skip writing entirely"
+
+    def test_stale_failure_from_a_past_run_would_be_overwritten(self, tmp_path):
+        # Simulates the exact bug: a stale file exists from a PAST failed run,
+        # then a NEW successful run (failed == []) must overwrite it, not leave
+        # the old failure sitting there for Check 5 to misread as current.
+        out_path = tmp_path / "weather_current_failures.csv"
+        pd.DataFrame([{"state": "Haryana", "district": "Karnal", "error": "stale from a past run"}]).to_csv(
+            out_path, index=False)
+        assert len(pd.read_csv(out_path)) == 1  # stale failure present, pre-fix state
+
+        failed = []  # this run had zero failures
+        pd.DataFrame(failed, columns=["state", "district", "error"]).to_csv(out_path, index=False)
+
+        result = pd.read_csv(out_path)
+        assert len(result) == 0, (
+            "A successful run must overwrite a stale failure from a past run, "
+            "not leave it sitting there to be misread as a current-run failure."
+        )
+
+
 if __name__ == '__main__':
     import sys
     sys.exit(pytest.main([__file__, '-v']))

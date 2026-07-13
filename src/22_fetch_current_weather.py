@@ -125,7 +125,19 @@ print(f"Total weather rows:   {len(combined)}")
 print(f"Date range: {combined['date'].min()} to {combined['date'].max()}")
 
 if failed:
-    pd.DataFrame(failed).to_csv("data/raw/weather_current_failures.csv", index=False)
     print(f"\nFailed districts saved to data/raw/weather_current_failures.csv")
+else:
+    print(f"\nNo failures this run - clearing any stale failures file from a previous run")
+
+# BUG FIX (2026-07-12): this used to be `if failed: ... .to_csv(...)` - meaning the
+# file was ONLY written when there WERE failures, and simply never touched otherwise.
+# That let a genuine failure from a PREVIOUS run (e.g. Karnal on 2026-07-11) sit on
+# disk indefinitely and get silently re-reported by the sanity gate's Check 5 as if
+# it happened on THIS run, even after every district fetched cleanly. A file meant
+# to represent "this run's" state must be written EVERY run, including the empty
+# case - otherwise it's not reporting the current run, it's reporting whichever past
+# run last had a failure, which is a false positive waiting to happen forever.
+pd.DataFrame(failed, columns=["state", "district", "error"]).to_csv(
+    "data/raw/weather_current_failures.csv", index=False)
 
 print(f"\nSaved to data/raw/weather_current_2020_2026.csv")

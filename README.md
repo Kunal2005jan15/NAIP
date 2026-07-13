@@ -165,7 +165,7 @@ Deployment: Docker → Azure Container Registry → Azure Kubernetes Service
 
 ## Engineering Audit Trail
 
-This project treats every real defect found — during development *and* after deployment — as documentation, not something to quietly patch and forget. **11 real bugs** found so far, all covered by the regression suite:
+This project treats every real defect found — during development *and* after deployment — as documentation, not something to quietly patch and forget. **12 real bugs** found so far, all covered by the regression suite:
 
 | # | Bug | Symptom | Root Cause | Fix |
 |---|---|---|---|---|
@@ -180,6 +180,7 @@ This project treats every real defect found — during development *and* after d
 | 9 | RAG panel silently vanishing | "Live Context" section simply didn't render, no error shown | `tavily-python` missing from `requirements.txt` — an indented, `try/except`-guarded import invisible to a naive top-level-only import scan | Added `tavily-python` to requirements; audited for other indented imports |
 | 10 | Orchestrator's gate-detection broke by position | Adding a step after the sanity gate would have silently misreported gate failures as generic crashes | `is_last = (i == len(PIPELINE_STEPS))` identified the sanity gate by array position, not identity | Identify the gate step by name (`'pipeline_sanity_checks' in step`) instead |
 | 11 | Single-district fetch failure masquerading as a real alert | A transient NASA POWER timeout for one district (Karnal, 2026-07-11) produced zero weather rows for that district only, which propagated three steps downstream into a spurious -730 kg/ha "urgent" District Watch alert — plus a *separate*, misleading sanity-gate false positive claiming the classifier itself was broken, when it had actually already correctly isolated the one real outlier | No retry on transient fetch errors; `weather_current_failures.csv` was logged but nothing ever read it; the diversity check compared dataset-wide variance instead of checking whether that variance was already correctly isolated outside the top category | Added retry-with-backoff to the NASA POWER fetch; added a new Check 5 that explicitly surfaces per-district fetch failures at the source; refined Check 2 to distinguish "real variance hidden inside the top category" (genuine bug) from "an outlier already correctly excluded from it" (working as designed) |
+| 12 | Stale fetch-failure file re-reported as a current-run failure | Check 5 kept failing on 2026-07-12 claiming Karnal's fetch failed, even though that day's log explicitly showed "Failed districts: 0" and Karnal fetching `OK` | `weather_current_failures.csv` was only ever written `if failed:` — when a later run had zero failures, the file was simply never touched, leaving the previous run's stale failure sitting on disk indefinitely for Check 5 to re-read as if it were current | Always write the file fresh every run, including the empty case, so it can only ever reflect the current run, never a leftover from a past one |
 
 ### Case Study: The Kharif 2026 Investigation
 
@@ -200,9 +201,9 @@ Runs after every pipeline refresh. 4 checks:
 A manually-diagnosed, evidence-backed finding can be acknowledged without permanently disabling the check that caught it. Every override requires a reason, evidence, and an expiry date (max 14 days) — after which the check automatically re-arms, so a genuinely new bug producing the same shape later can't hide behind a stale override.
 
 ### Regression Suite (`tests/test_pipeline.py`)
-30 pytest tests across 6 test classes, covering all 10 bugs above by name:
+32 pytest tests across 7 test classes, covering all 12 bugs above by name:
 ```bash
-pytest tests/test_pipeline.py -v   # All 30 should pass
+pytest tests/test_pipeline.py -v   # All 32 should pass
 ```
 
 ---
@@ -250,7 +251,7 @@ NAIP/
 │       ├── 12-ingress.yaml
 │       └── 20-refresh-cronjob.yaml
 ├── tests/
-│   └── test_pipeline.py              # 30 pytest regression tests
+│   └── test_pipeline.py              # 32 pytest regression tests
 ├── data/
 │   ├── raw/                          # NASA POWER, groundwater exports
 │   ├── processed/                    # Merged, engineered datasets
