@@ -606,6 +606,56 @@ html, body, [class*="css"] {
 .stTabs [data-baseweb="tab-highlight"] {
     display: none !important;
 }
+.stTabs [data-baseweb="tab-list"] {
+    scrollbar-width: thin;
+    scrollbar-color: var(--wheat) transparent;
+}
+.stTabs [data-baseweb="tab-list"]::-webkit-scrollbar { height: 4px; }
+.stTabs [data-baseweb="tab-list"]::-webkit-scrollbar-thumb {
+    background: var(--wheat); border-radius: 4px;
+}
+
+/* ── EQUAL-HEIGHT CARDS ACROSS A ROW ──
+   st.columns() rows don't stretch children to match height by default,
+   so a stat row with uneven sub-text (e.g. one card wrapping to two
+   lines) previously left ragged card bottoms. Stretch the row and let
+   each card fill its column. */
+[data-testid="stHorizontalBlock"] { align-items: stretch; }
+[data-testid="stHorizontalBlock"] > [data-testid="column"] { display: flex; }
+[data-testid="stHorizontalBlock"] > [data-testid="column"] > div { width: 100%; }
+.naip-card { height: 100%; box-sizing: border-box; }
+
+/* ── RESPONSIVE ──
+   Previously zero @media rules existed, so the masthead, 4-5 col stat
+   rows, and map/detail-panel columns simply overflowed or crushed
+   together below ~1100px instead of adapting. */
+@media (max-width: 900px) {
+    .naip-masthead {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 36px 28px 30px;
+    }
+    .naip-masthead::before { display: none; }
+    .naip-title { font-size: 2.3rem; }
+    .naip-title span { font-size: 1.25rem; }
+    .naip-masthead-tag { text-align: left; padding-bottom: 0; }
+    [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; row-gap: 12px; }
+    [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+        min-width: 46% !important;
+        flex: 1 1 46% !important;
+    }
+}
+@media (max-width: 560px) {
+    .naip-masthead { padding: 28px 20px 24px; }
+    .naip-title { font-size: 1.8rem; }
+    .naip-stat-number { font-size: 2.1rem; }
+    [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+        min-width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+    .stTabs [data-baseweb="tab"] { font-size: 0.73rem !important; padding: 7px 11px !important; }
+}
 
 /* ── STREAMLIT CHROME CLEANUP ── */
 #MainMenu { visibility: hidden; }
