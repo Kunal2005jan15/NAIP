@@ -1,0 +1,5 @@
+streamlit>=1.30
+streamlit-folium>=0.20
+folium>=0.15
+matplotlib>=3.7
+lightgbm>=4.0

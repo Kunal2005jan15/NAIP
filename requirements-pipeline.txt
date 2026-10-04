@@ -1,0 +1,10 @@
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+scikit-learn>=1.3
+xgboost==2.1.1
+shap>=0.44,<0.50
+requests>=2.31
+earthengine-api>=0.1.390
+geopy>=2.4
+tavily-python>=0.5

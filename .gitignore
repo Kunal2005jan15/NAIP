@@ -24,9 +24,16 @@ data/raw/weather_current_PARTIAL.csv
 data/processed/*.csv
 !data/processed/.gitkeep
 
-# ---- Trained models (large binary files, regenerate via training scripts) ----
+# ---- Trained models: only the 3 serving models are committed (in models/) ----
 outputs/models/*.pkl
 outputs/models/*.json
+!models/xgb_tuned.pkl
+!models/xgb_lower.pkl
+!models/xgb_upper.pkl
+
+# ---- Small reference data is committed; everything else under data/ stays out ----
+!data/reference/
+!data/reference/**
 
 # ---- Snapshots (these accumulate over time, don't bloat the repo) ----
 data/snapshots/*.csv

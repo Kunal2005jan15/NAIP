@@ -1,28 +1,4 @@
-# NAIP requirements — derived directly from imports across src/, dashboard/, api/, tests/
-# (generated 2026-07-07; previously this file did not exist in the repo)
-
-pandas>=2.0
-numpy>=1.24
-scipy>=1.10
-scikit-learn>=1.3
-xgboost==2.1.1
-lightgbm>=4.0
-shap>=0.44,<0.50
-matplotlib>=3.7
-
-streamlit>=1.30
-streamlit-folium>=0.20
-folium>=0.15
-
-fastapi>=0.110
-uvicorn[standard]>=0.29
-
-earthengine-api>=0.1.390   # imported as `ee` — for MODIS NDVI / JRC surface water (scripts 34-36)
-geopy>=2.4                  # district geocoding (Nominatim/OSM)
-requests>=2.31
-tavily-python>=0.5          # RAG live grounding (src/rag_grounding_31.py) — MISSED in the first
-                             # pass of this file because it's an indented, try/except-guarded
-                             # import, not a top-level one; found 2026-07-07 while debugging
-                             # "RAG feature not working"
-
-pytest>=7.4
+-r requirements-pipeline.txt
+-r requirements-api.txt
+-r requirements-dev.txt
+-r requirements-legacy.txt
