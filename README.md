@@ -10,7 +10,7 @@
 [![NASA POWER](https://img.shields.io/badge/weather-NASA%20POWER-green.svg)](https://power.larc.nasa.gov/)
 [![Google Earth Engine](https://img.shields.io/badge/satellite-GEE%20MODIS%20%2B%20JRC-lightgreen.svg)](https://earthengine.google.com/)
 [![FastAPI](https://img.shields.io/badge/api-FastAPI-teal.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-30%20passing-brightgreen.svg)](tests/test_pipeline.py)
+[![Tests](https://img.shields.io/badge/tests-37%20passing-brightgreen.svg)](tests/test_pipeline.py)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 </div>
@@ -18,6 +18,8 @@
 > **अन्न (Anna)** — Sanskrit for "food" or "grain." The Taittiriya Upanishad declares *Annam Brahma* — "food is divine." Named after the oldest Sanskrit word for the crop itself, ANNA predicts food availability at the district level, one season ahead.
 
 > **A note on naming:** this product is branded **ANNA**; the underlying repository, Python package, and script filenames retain their original working name (`NAIP`, `naip_api.py`, etc.) from earlier in development. Nothing was renamed at the code level to avoid breaking a large number of tested references — see [`api/naip_api.py`](api/naip_api.py) and the folder structure below.
+
+> **Research prototype.** Predictions are model estimates with uncertainty and are not a substitute for local agronomic or financial advice. ANNA is a B.Tech major project and research artifact, not an operational decision system.
 
 ---
 
@@ -45,22 +47,18 @@
 
 ## What This Is
 
-ANNA is a **production-grade agricultural intelligence system** that predicts Wheat and Rice yields at the district level, one season ahead, and delivers those predictions through two interfaces that are actually built, running, and tested:
+ANNA is a **research prototype for district-level crop-yield prediction** that predicts Wheat and Rice yields at the district level, one season ahead, and delivers those predictions through two interfaces that are actually built, running, and tested:
 
 - A **live 6-tab Streamlit dashboard** with season-aware early warning, SHAP explanations in officer language, and a real-time District Watch alert feed
 - A **REST API** (FastAPI, 6 endpoints, auto-generated Swagger docs) — reads the same pipeline outputs as the dashboard, no duplicated logic
-- An **automated daily refresh pipeline** (8-step orchestrator, Windows Task Scheduler), plus a 9th optional step (`39_publish_to_azure_sql.py`) that's written but has no Azure Database to publish to yet
-- A **validated sanity gate** with an auditable, self-expiring override mechanism, backed by a 30-test regression suite
+- An **automated daily refresh pipeline** (8-step orchestrator run by Windows Task Scheduler; moving to GitHub Actions in v2)
+- A **validated sanity gate** with an auditable, self-expiring override mechanism, backed by a 37-test regression suite
 
-**Not yet built, despite being designed and documented below:** a Power BI reporting layer, Docker containerization, and Azure Kubernetes Service deployment. Dockerfiles and Kubernetes manifests exist in `deploy/` as a written, YAML-validated starting point — but no image has been built, no cluster exists, and no Power BI report has ever been opened. See [Deployment](#deployment) for the exact, honest status of each piece.
+**Not built, and dropped from v2:** a Power BI reporting layer and Docker / Kubernetes / Azure deployment. Earlier drafts of this README described them as designed; they never existed in this repository. The v2 plan in [`docs/`](docs/) replaces them with a Postgres database, a versioned FastAPI service, a Next.js web app and scheduled GitHub Actions.
 
-It is not a research prototype. It is a running system with real live data and a documented audit trail of every real bug found and fixed during development — including bugs still being found and fixed in production.
+It runs on real live data and keeps a documented audit trail of every real bug found and fixed during development.
 
-**Live outputs (as of 2026-07-08 — this section moves with every refresh; re-verify before quoting elsewhere):**
-- 118 districts monitored across 3 states
-- Mean Wheat 2026 outlook: **4,323 kg/ha**
-- Kharif 2026 risk: currently showing a severe, independently-verified early monsoon deficit across most districts — see the [Case Study](#case-study-the-kharif-2026-investigation) below
-- Last refresh: daily, automated
+**Live outputs** (predictions, district alerts, Kharif risk) are shown on the dashboard and change with every refresh. Figures quoted in earlier versions of this README were a 2026-07-08 snapshot and have been removed.
 
 ---
 
@@ -95,7 +93,7 @@ This system was built to serve four goals simultaneously:
 | Research paper | ⏳ In progress — all methodology documented and validated |
 | Patent filing | ⏳ Draft started — time-sensitive given public repo; provisional filing recommended |
 | Portfolio / demo | ✅ Complete — live dashboard, live REST API, demoable in minutes |
-| Cloud deployment (Docker/AKS/Power BI) | ❌ **Not built** — Dockerfiles and Kubernetes manifests exist as a design/starting point only; never built, deployed, or run against real infrastructure. See [Deployment](#deployment) for the honest status. |
+| Cloud deployment (Docker/AKS/Power BI) | ❌ **Dropped.** Never built; replaced by the v2 plan in [`docs/`](docs/). |
 
 ---
 
@@ -106,7 +104,7 @@ DATA SOURCES                    PIPELINE (scripts 00–40)              OUTPUTS
 ────────────                    ────────────────────────              ───────
 NASA POWER API (daily)  ──►  22 fetch current weather            Streamlit Dashboard (6 tabs) [BUILT]
                              26 fix fill values (-999 bug)        FastAPI REST API (6 endpoints) [BUILT]
-MODIS NDVI (GEE)        ──►  34 fetch NDVI historical            Power BI (via Azure SQL) [DESIGNED, NOT BUILT]
+MODIS NDVI (GEE)        ──►  34 fetch NDVI historical
                              35 fetch NDVI current (live)         District Watch alerts [BUILT]
 JRC Surface Water (GEE) ──►  36 fetch surface water              Kharif 2026 risk flags [BUILT]
                                                                    Walk-forward CV (12 folds) [BUILT]
@@ -120,13 +118,8 @@ Scientific Data)
 Model: 19 tune xgboost → 20 finalize (SHAP + quantile intervals)
 
 Automated:  00_run_full_refresh.py
-            runs 22→26→25→35→27→28→32→33→39 daily
-            (39 = optional Azure SQL publish for Power BI - written, never run against
-            real Azure; no-op locally with no effect on the other 8 steps)
+            runs 22→26→25→35→27→28→32→33 daily
             logs to logs/refresh_YYYYMMDD_HHMMSS.log
-
-Deployment: Docker → Azure Container Registry → Azure Kubernetes Service
-            [DESIGNED, NOT BUILT - see Deployment section below for the honest status]
 ```
 
 ---
@@ -200,10 +193,10 @@ Runs after every pipeline refresh. 4 checks:
 ### Override Mechanism (`data/pipeline_overrides.json`)
 A manually-diagnosed, evidence-backed finding can be acknowledged without permanently disabling the check that caught it. Every override requires a reason, evidence, and an expiry date (max 14 days) — after which the check automatically re-arms, so a genuinely new bug producing the same shape later can't hide behind a stale override.
 
-### Regression Suite (`tests/test_pipeline.py`)
-32 pytest tests across 7 test classes, covering all 12 bugs above by name:
+### Regression Suite (`tests/`)
+37 pytest tests: 32 regression tests in `tests/test_pipeline.py` (7 classes, covering all 12 bugs above by name) plus 5 golden-value tests for the shared weather features in `tests/test_weather_features.py`.
 ```bash
-pytest tests/test_pipeline.py -v   # All 32 should pass
+pytest -q   # All 37 should pass locally; CI skips 3 data-dependent integration tests
 ```
 
 ---
@@ -212,63 +205,37 @@ pytest tests/test_pipeline.py -v   # All 32 should pass
 
 ```
 NAIP/
-├── src/                              # 45 scripts, numbered 00–40 (includes a few
-│                                      #   sub-numbered debug/utility scripts)
-│   ├── 00_run_full_refresh.py        # Master orchestrator (daily)
-│   ├── 14_fetch_weather_all_districts.py
-│   ├── 15_aggregate_weather_all.py   # Season-window fix + GDD/dry-streak/water-balance
-│   ├── 16_merge_full_weather_retrain.py
-│   ├── 17_feature_engineering_v2.py
-│   ├── 19_tune_xgboost.py
-│   ├── 20_finalize_tuned_model.py    # SHAP + calibrated quantile intervals
-│   ├── 22_fetch_current_weather.py   # NASA POWER live pull
-│   ├── 25_current_conditions.py      # Live Rabi 2025-26 feature assembly
-│   ├── 27_generate_current_predictions.py
-│   ├── 28_district_watch.py          # Snapshot/diff alert engine
-│   ├── 32_kharif_early_warning.py    # Same-window risk classification
-│   ├── 33_pipeline_sanity_checks.py  # Automated validation gate
-│   ├── 34_fetch_ndvi_historical.py   # MODIS NDVI backfill (GEE)
-│   ├── 35_fetch_ndvi_current.py      # Live NDVI for current season
-│   ├── 36_fetch_surface_water.py     # JRC surface water (GEE)
-│   ├── 37_load_groundwater.py        # Kuruva et al. 2025 loader
-│   ├── 38_groundwater_analysis.py    # Residual-correlation finding
-│   ├── 39_publish_to_azure_sql.py    # Power BI data feed (no-op without Azure SQL env vars)
-│   ├── 40_model_validation.py        # Walk-forward CV + residuals + calibration
-│   └── setup_tavily.py               # One-time Tavily API key setup
-├── dashboard/
-│   └── app.py                        # Streamlit app (1,704 lines, 6 tabs)
+├── .github/workflows/ci.yml          # CI: ruff (new code), syntax check, pytest
 ├── api/
-│   └── naip_api.py                   # FastAPI REST API (6 endpoints)
-├── deploy/                            # Docker + Kubernetes deployment configs
-│   ├── Dockerfile.dashboard
-│   ├── Dockerfile.api
-│   ├── Dockerfile.refresh
-│   └── k8s/
-│       ├── 00-namespace-storage.yaml
-│       ├── 01-secrets-template.yaml
-│       ├── 10-dashboard.yaml
-│       ├── 11-api.yaml
-│       ├── 12-ingress.yaml
-│       └── 20-refresh-cronjob.yaml
-├── tests/
-│   └── test_pipeline.py              # 32 pytest regression tests
+│   └── naip_api.py                   # FastAPI REST API (6 endpoints; v1 rewrite planned)
+├── archive/                          # Retired scripts kept for history
+├── dashboard/
+│   └── app.py                        # Streamlit app (6 tabs; legacy, to be replaced)
 ├── data/
-│   ├── raw/                          # NASA POWER, groundwater exports
-│   ├── processed/                    # Merged, engineered datasets
-│   ├── snapshots/                    # District Watch time-series
-│   ├── secrets/                      # API keys (gitignored, never committed)
+│   ├── raw/                          # NASA POWER, groundwater exports (gitignored)
+│   ├── processed/                    # Merged, engineered datasets (gitignored)
+│   ├── snapshots/                    # District Watch time-series (gitignored)
 │   └── pipeline_overrides.json       # Auditable sanity-gate override log
+├── diagram/                          # Use-case and system-architecture diagrams
+├── docs/                             # v2 design docs and README screenshots
+├── logs/                             # Refresh logs (timestamped)
+├── models/                           # Serving models: xgb_tuned, xgb_lower, xgb_upper
+├── notebooks/
+│   └── build_figures.py              # Reproducible figure generation
 ├── outputs/
-│   ├── models/                       # xgb_tuned.pkl, xgb_lower.pkl, xgb_upper.pkl
+│   ├── models/                       # Experimental models (gitignored)
 │   ├── metrics/                      # SHAP rankings, walk-forward CV, residuals
 │   └── plots/
-├── notebooks/
-│   └── build_figures.py              # Reproducible figure generation for paper/report
-├── docs/
-│   └── screenshots/                  # README screenshots
-├── logs/                             # Refresh logs (timestamped)
-├── run_refresh.bat                   # Windows Task Scheduler entry point
-└── requirements.txt
+├── pipeline/
+│   └── features/weather.py           # Shared seasonal weather features (training + live)
+├── src/                              # Numbered pipeline scripts; 00_run_full_refresh.py is the orchestrator
+├── tests/
+│   ├── test_pipeline.py              # 32 regression tests
+│   └── test_weather_features.py      # 5 golden-value tests
+├── pytest.ini
+├── requirements*.txt                 # Split: pipeline, api, dev, legacy (dashboard)
+├── ruff.toml
+└── run_refresh.bat                   # Windows Task Scheduler entry point
 ```
 
 ---
@@ -285,13 +252,14 @@ NAIP/
 ```bash
 conda create -n naip python=3.10
 conda activate naip
-pip install -r requirements.txt
+pip install -r requirements.txt   # installs all four groups: pipeline, api, dev, legacy (dashboard)
 
 # One-time Earth Engine authentication (opens browser)
 python src/34_fetch_ndvi_historical.py
 
-# Optional: set up Tavily for live policy context
-python src/setup_tavily.py
+# Optional: Tavily key for live policy context, read from an environment variable
+#   Windows:     setx TAVILY_API_KEY "your-key"     (then reopen the terminal)
+#   macOS/Linux: export TAVILY_API_KEY="your-key"
 ```
 
 ### Historical pipeline (one-time, ~2–3 hours total)
@@ -316,9 +284,8 @@ python src/40_model_validation.py
 # Manual
 python src/00_run_full_refresh.py
 
-# Automated (Windows Task Scheduler → run_refresh.bat)
-# An AKS CronJob is designed as a future alternative (see Deployment section) but not built
-# Runs: 22 → 26 → 25 → 35 → 27 → 28 → 32 → 33 → 39
+# Automated (Windows Task Scheduler → run_refresh.bat); moving to GitHub Actions in v2
+# Runs: 22 → 26 → 25 → 35 → 27 → 28 → 32 → 33
 ```
 
 ### Launch dashboard / API / tests
@@ -326,46 +293,16 @@ python src/00_run_full_refresh.py
 ```bash
 streamlit run dashboard/app.py
 uvicorn api.naip_api:app --reload --port 8000   # Swagger UI: http://localhost:8000/docs
-pytest tests/test_pipeline.py -v                 # Expected: 30 passed
+pytest -q                                        # Expected: 37 passed
 ```
 
 ---
 
 ## Deployment
 
-> ⚠️ **Status: designed, not built.** Everything below describes Dockerfiles and Kubernetes manifests that exist as text files in `deploy/`, written and YAML-syntax-validated — but **never actually run**. No Docker image has been built, no container has been started, no Azure resource (ACR, AKS, SQL Database) has been created, and no Power BI report has ever been opened or connected. Treat this as a design spec and starting point for doing the real work, not as a description of a working deployment. The one thing that's had any real execution is `src/39_publish_to_azure_sql.py`, and only enough to confirm it exits cleanly when no Azure credentials are set — it has never connected to a real database.
-
-Containerized and intended for Azure Kubernetes Service. Three images, three roles — deliberately *not* uniformly scaled in the design, since not every component would benefit from Kubernetes the same way:
-
-| Component | Replicas (as designed) | Why |
-|---|---|---|
-| Dashboard | 1 | No per-user scaling need — not inflated just to "use" Kubernetes features |
-| API | 2 | Stateless GETs genuinely benefit from rolling updates + self-healing |
-| Refresh pipeline | CronJob | The strongest real justification for Kubernetes here — a scheduled, retried, resource-limited batch job replacing Windows Task Scheduler entirely, running even if no machine is physically on |
-
-```bash
-# NONE OF THIS HAS BEEN RUN. This is the intended sequence once you have an
-# Azure subscription, Docker Desktop, and kubectl set up - not a record of
-# what's already working.
-
-# Build & push
-docker build -f deploy/Dockerfile.dashboard -t <ACR_NAME>.azurecr.io/naip-dashboard:latest .
-docker build -f deploy/Dockerfile.api       -t <ACR_NAME>.azurecr.io/naip-api:latest .
-docker build -f deploy/Dockerfile.refresh   -t <ACR_NAME>.azurecr.io/naip-refresh:latest .
-docker push <ACR_NAME>.azurecr.io/naip-dashboard:latest
-docker push <ACR_NAME>.azurecr.io/naip-api:latest
-docker push <ACR_NAME>.azurecr.io/naip-refresh:latest
-
-# Deploy (in order)
-kubectl apply -f deploy/k8s/00-namespace-storage.yaml
-kubectl create secret generic naip-secrets -n naip --from-literal=... # see 01-secrets-template.yaml
-kubectl apply -f deploy/k8s/10-dashboard.yaml
-kubectl apply -f deploy/k8s/11-api.yaml
-kubectl apply -f deploy/k8s/12-ingress.yaml
-kubectl apply -f deploy/k8s/20-refresh-cronjob.yaml
-```
-
-Shared state (predictions, alerts, logs) would flow through an Azure Files `ReadWriteMany` volume mounted into all three workloads, so a fresh CronJob run becomes visible to the already-running dashboard/API pods without a redeploy. **Power BI** would connect directly to Azure SQL Database (populated by `src/39_publish_to_azure_sql.py` at the end of each refresh) on its own scheduled refresh — a separate, executive-facing data path, decoupled from the operational dashboard/API. None of this exists yet.
+> **Status: not deployed.** ANNA runs locally: the Streamlit dashboard and FastAPI service are started by hand, and the daily refresh runs through Windows Task Scheduler.
+>
+> Earlier versions of this README described a Docker / Azure Kubernetes Service / Power BI design. None of it was ever built and it has been dropped. The v2 plan replaces it with a Postgres database, a versioned FastAPI service, a Next.js web app and scheduled GitHub Actions. See [`docs/systemdesign.md`](docs/systemdesign.md) and [`docs/ci-cd.md`](docs/ci-cd.md).
 
 ---
 
