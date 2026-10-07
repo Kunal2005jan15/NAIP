@@ -16,6 +16,11 @@
 import pandas as pd
 import numpy as np
 import json
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from pipeline.features.weather import season_block_features
 
 print("Loading current weather (2020-2026, fill-value corrected) and historical model data...")
 
@@ -39,40 +44,7 @@ with open('data/processed/feature_list_v2.txt') as f:
 
 print("\nAggregating most recent COMPLETED season (Rabi 2025-26) per district...")
 
-def _rabi_block_agronomic_features(block):
-    """
-    SAME formulas as script 15's _season_block_features(), kept in
-    sync deliberately: after finding (and fixing) a real train/serve
-    mismatch in the Rabi season window itself, any new feature added
-    to training MUST be mirrored here exactly, or we'd reintroduce
-    the same class of bug for the live dashboard.
-    """
-    base_temp = 10.0
-    gdd = np.maximum(block['temp_avg_c'] - base_temp, 0).sum()
 
-    is_dry = (block['rainfall_mm'] < 1.0).values
-    if is_dry.any():
-        change = np.diff(np.concatenate(([0], is_dry.astype(int), [0])))
-        starts = np.where(change == 1)[0]
-        ends = np.where(change == -1)[0]
-        max_dry_streak = (ends - starts).max() if len(starts) else 0
-    else:
-        max_dry_streak = 0
-
-    rain_mean = block['rainfall_mm'].mean()
-    rain_std = block['rainfall_mm'].std()
-    rainfall_cv = (rain_std / rain_mean) if rain_mean and rain_mean > 0 else np.nan
-
-    trange = (block['temp_max_c'] - block['temp_min_c']).clip(lower=0)
-    et0_daily = 0.0023 * block['solar_radiation'] * (block['temp_avg_c'] + 17.8) * np.sqrt(trange)
-    water_balance = block['rainfall_mm'].sum() - et0_daily.sum()
-
-    return pd.Series({
-        'current_gdd_rabi': gdd,
-        'current_max_dry_streak_rabi': max_dry_streak,
-        'current_rainfall_cv_rabi': rainfall_cv,
-        'current_water_balance_rabi': water_balance,
-    })
 
 
 def get_latest_seasonal_weather(df):
@@ -97,7 +69,7 @@ def get_latest_seasonal_weather(df):
             'data_as_of': df['date'].max().strftime('%Y-%m-%d'),
         }
         if len(rabi_now) > 0:
-            row.update(_rabi_block_agronomic_features(rabi_now).to_dict())
+            row.update(season_block_features(rabi_now, 'rabi', prefix='current_').to_dict())
         else:
             row.update({'current_gdd_rabi': np.nan, 'current_max_dry_streak_rabi': np.nan,
                         'current_rainfall_cv_rabi': np.nan, 'current_water_balance_rabi': np.nan})

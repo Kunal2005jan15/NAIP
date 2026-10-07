@@ -9,6 +9,12 @@
 import pandas as pd
 import numpy as np
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # repo root, so `pipeline` imports work
+
+from pipeline.features.weather import season_block_features as _season_block_features
+
 print("Loading full weather dataset (991,200 rows)...")
 weather = pd.read_csv('data/raw/weather_all_districts.csv')
 weather['date'] = pd.to_datetime(weather['date'])
@@ -22,57 +28,7 @@ print(f"Districts: {weather['district'].nunique()}")
 # SEASONAL AGGREGATION (same logic as the 3-district version)
 # ---------------------------------------------------------------
 
-def _season_block_features(block, season_label):
-    """
-    Computes richer agronomic features for one (state, district,
-    crop-year) season block of daily rows - all derived from data
-    already in weather_all_districts.csv, no new sourcing needed:
 
-      - gdd_{season}: Growing Degree Days (base 10C), accumulated
-        heat available to the crop - a better growth-stress signal
-        than a flat average temperature.
-      - max_dry_streak_{season}: longest run of consecutive days
-        with <1mm rain. Captures DROUGHT STRESS DURATION, not just
-        total deficit - this is exactly the timing-matters lesson
-        from the Kharif early-warning bug (script 32): a 25-day dry
-        spell hurts more than the same total mm spread evenly.
-      - rainfall_cv_{season}: coefficient of variation of daily
-        rainfall (std/mean) - how concentrated/bursty the season's
-        rain was, independent of the total.
-      - water_balance_{season}: rainfall minus a simplified
-        Hargreaves ET0 estimate, i.e. net moisture available rather
-        than raw rainfall alone.
-    """
-    base_temp = 10.0
-    gdd = np.maximum(block['temp_avg_c'] - base_temp, 0).sum()
-
-    is_dry = (block['rainfall_mm'] < 1.0).values
-    if is_dry.any():
-        # run-length encode consecutive True values
-        change = np.diff(np.concatenate(([0], is_dry.astype(int), [0])))
-        starts = np.where(change == 1)[0]
-        ends = np.where(change == -1)[0]
-        max_dry_streak = (ends - starts).max() if len(starts) else 0
-    else:
-        max_dry_streak = 0
-
-    rain_mean = block['rainfall_mm'].mean()
-    rain_std = block['rainfall_mm'].std()
-    rainfall_cv = (rain_std / rain_mean) if rain_mean and rain_mean > 0 else np.nan
-
-    # Simplified Hargreaves ET0 (mm/day) using measured solar radiation
-    # in place of extraterrestrial radiation - a standard simplification
-    # when only ground station data (not Ra tables) is available.
-    trange = (block['temp_max_c'] - block['temp_min_c']).clip(lower=0)
-    et0_daily = 0.0023 * block['solar_radiation'] * (block['temp_avg_c'] + 17.8) * np.sqrt(trange)
-    water_balance = block['rainfall_mm'].sum() - et0_daily.sum()
-
-    return pd.Series({
-        f'gdd_{season_label}': gdd,
-        f'max_dry_streak_{season_label}': max_dry_streak,
-        f'rainfall_cv_{season_label}': rainfall_cv,
-        f'water_balance_{season_label}': water_balance,
-    })
 
 
 def get_seasonal_weather(df):
