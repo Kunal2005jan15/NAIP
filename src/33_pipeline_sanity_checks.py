@@ -105,7 +105,7 @@ model_files = {
 }
 
 for fname, label in model_files.items():
-    path = f'outputs/models/{fname}'
+    path = f'models/{fname}'
     if not os.path.exists(path):
         warn(f"{label} ({fname}) not found - skipping schema check")
         continue
@@ -307,9 +307,9 @@ REQUIRED_FILES = [
     'data/processed/current_predictions_full.csv',
     'outputs/metrics/district_watch_feed.csv',
     'data/processed/kharif_2026_risk_flags.csv',
-    'outputs/models/xgb_tuned.pkl',
-    'outputs/models/xgb_lower.pkl',
-    'outputs/models/xgb_upper.pkl',
+    'models/xgb_tuned.pkl',
+    'models/xgb_lower.pkl',
+    'models/xgb_upper.pkl',
 ]
 for path in REQUIRED_FILES:
     if not os.path.exists(path):

@@ -117,7 +117,7 @@ print(f"  Tuned XGBoost:         R²={r2:.4f}  RMSE={rmse:.1f}")
 print(f"  Random Forest (v2):    R²=0.8602  RMSE=342.8  <- benchmark to beat")
 
 import pickle
-with open('outputs/models/xgb_tuned.pkl', 'wb') as f:
+with open('models/xgb_tuned.pkl', 'wb') as f:
     pickle.dump(best_model, f)
 
 import json

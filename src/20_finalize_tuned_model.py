@@ -27,7 +27,7 @@ X_test  = test[FEATURES]
 y_test  = test[TARGET]
 
 # Load the tuned model and its best params
-with open('outputs/models/xgb_tuned.pkl', 'rb') as f:
+with open('models/xgb_tuned.pkl', 'rb') as f:
     xgb_tuned = pickle.load(f)
 
 with open('outputs/metrics/xgb_best_params.json') as f:
@@ -84,14 +84,14 @@ xgb_lower.fit(X_train, y_train)
 
 # BUG FIX (2026-06-28): this script trains xgb_lower/xgb_upper on the
 # correct v2 feature set, but previously never saved them to disk -
-# so outputs/models/xgb_lower.pkl and xgb_upper.pkl were silently left
+# so models/xgb_lower.pkl and xgb_upper.pkl were silently left
 # as STALE leftovers from the pre-v2 pipeline (06_train_model.py,
 # June 17), trained on old non-"nasa_"-prefixed feature names. Any
 # code loading those files for live inference (e.g. the dashboard)
 # would get a feature_names mismatch. Saving them properly now.
-with open('outputs/models/xgb_lower.pkl', 'wb') as f:
+with open('models/xgb_lower.pkl', 'wb') as f:
     pickle.dump(xgb_lower, f)
-print("Saved: outputs/models/xgb_lower.pkl (v2 features, quantile_alpha=0.02)")
+print("Saved: models/xgb_lower.pkl (v2 features, quantile_alpha=0.02)")
 
 xgb_upper = xgb.XGBRegressor(
     **quantile_params,
@@ -101,9 +101,9 @@ xgb_upper = xgb.XGBRegressor(
 )
 xgb_upper.fit(X_train, y_train)
 
-with open('outputs/models/xgb_upper.pkl', 'wb') as f:
+with open('models/xgb_upper.pkl', 'wb') as f:
     pickle.dump(xgb_upper, f)
-print("Saved: outputs/models/xgb_upper.pkl (v2 features, quantile_alpha=0.98)")
+print("Saved: models/xgb_upper.pkl (v2 features, quantile_alpha=0.98)")
 
 pred_lower = xgb_lower.predict(X_test)
 pred_upper = xgb_upper.predict(X_test)

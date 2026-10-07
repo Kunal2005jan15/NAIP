@@ -131,9 +131,9 @@ print("=" * 60)
 print("  Checking whether the published ~81% coverage holds across")
 print("  the whole yield range, or only on average.\n")
 
-with open('outputs/models/xgb_lower.pkl', 'rb') as f:
+with open('models/xgb_lower.pkl', 'rb') as f:
     xgb_lower = pickle.load(f)
-with open('outputs/models/xgb_upper.pkl', 'rb') as f:
+with open('models/xgb_upper.pkl', 'rb') as f:
     xgb_upper = pickle.load(f)
 
 test_eval = test.copy()

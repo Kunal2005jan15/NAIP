@@ -111,7 +111,7 @@ for split_name, split_df in SPLITS.items():
 # 3. TUNED XGBOOST  (existing model, re-scored on same split for
 #    a single apples-to-apples table)
 # -------------------------------------------------------------
-with open('outputs/models/xgb_tuned.pkl', 'rb') as f:
+with open('models/xgb_tuned.pkl', 'rb') as f:
     xgb_model = pickle.load(f)
 
 X = test[FEATURES]

@@ -1014,15 +1014,15 @@ def load_quantile_models():
     replaces the old manual what-if sliders as the default uncertainty
     view, per the honest-prediction-model rework.
     """
-    with open('outputs/models/xgb_lower.pkl', 'rb') as f:
+    with open('models/xgb_lower.pkl', 'rb') as f:
         lower = pickle.load(f)
-    with open('outputs/models/xgb_upper.pkl', 'rb') as f:
+    with open('models/xgb_upper.pkl', 'rb') as f:
         upper = pickle.load(f)
     return lower, upper
 
 @st.cache_resource
 def load_model_and_shap():
-    with open('outputs/models/xgb_tuned.pkl', 'rb') as f:
+    with open('models/xgb_tuned.pkl', 'rb') as f:
         model = pickle.load(f)
     with open('data/processed/feature_list_v2.txt') as f:
         features = [line.strip() for line in f.readlines()]

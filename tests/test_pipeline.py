@@ -279,7 +279,7 @@ class TestModelSchemaConsistency:
             current_features = [l.strip() for l in f.readlines()]
 
         for fname in ['xgb_tuned.pkl', 'xgb_lower.pkl', 'xgb_upper.pkl']:
-            path = _path(f'outputs/models/{fname}')
+            path = _path(f'models/{fname}')
             if not os.path.exists(path):
                 pytest.skip(f"{fname} not present in this environment")
             with open(path, 'rb') as f:

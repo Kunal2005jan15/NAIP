@@ -14,7 +14,7 @@ import json
 
 print("Loading tuned model and current-conditions inputs...")
 
-with open('outputs/models/xgb_tuned.pkl', 'rb') as f:
+with open('models/xgb_tuned.pkl', 'rb') as f:
     model = pickle.load(f)
 
 with open('data/processed/feature_list_v2.txt') as f:
