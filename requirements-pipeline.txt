@@ -8,3 +8,7 @@ requests>=2.31
 earthengine-api>=0.1.390
 geopy>=2.4
 tavily-python>=0.5
+psycopg[binary]>=3.1
+sqlalchemy>=2.0
+alembic>=1.13
+python-dotenv>=1.0
