@@ -34,9 +34,9 @@ def season_block_features(block: pd.DataFrame, season_label: str, prefix: str = 
       water_balance  Season rainfall minus simplified Hargreaves ET0,
                      using measured solar radiation in place of Ra.
     """
-    gdd = np.maximum(block['temp_avg_c'] - GDD_BASE_TEMP_C, 0).sum()
+    gdd = np.maximum(block["temp_avg_c"] - GDD_BASE_TEMP_C, 0).sum()
 
-    is_dry = (block['rainfall_mm'] < DRY_DAY_THRESHOLD_MM).values
+    is_dry = (block["rainfall_mm"] < DRY_DAY_THRESHOLD_MM).values
     if is_dry.any():
         # run-length encode consecutive True values
         change = np.diff(np.concatenate(([0], is_dry.astype(int), [0])))
@@ -46,17 +46,19 @@ def season_block_features(block: pd.DataFrame, season_label: str, prefix: str = 
     else:
         max_dry_streak = 0
 
-    rain_mean = block['rainfall_mm'].mean()
-    rain_std = block['rainfall_mm'].std()
+    rain_mean = block["rainfall_mm"].mean()
+    rain_std = block["rainfall_mm"].std()
     rainfall_cv = (rain_std / rain_mean) if rain_mean and rain_mean > 0 else np.nan
 
-    trange = (block['temp_max_c'] - block['temp_min_c']).clip(lower=0)
-    et0_daily = 0.0023 * block['solar_radiation'] * (block['temp_avg_c'] + 17.8) * np.sqrt(trange)
-    water_balance = block['rainfall_mm'].sum() - et0_daily.sum()
+    trange = (block["temp_max_c"] - block["temp_min_c"]).clip(lower=0)
+    et0_daily = 0.0023 * block["solar_radiation"] * (block["temp_avg_c"] + 17.8) * np.sqrt(trange)
+    water_balance = block["rainfall_mm"].sum() - et0_daily.sum()
 
-    return pd.Series({
-        f'{prefix}gdd_{season_label}': gdd,
-        f'{prefix}max_dry_streak_{season_label}': max_dry_streak,
-        f'{prefix}rainfall_cv_{season_label}': rainfall_cv,
-        f'{prefix}water_balance_{season_label}': water_balance,
-    })
+    return pd.Series(
+        {
+            f"{prefix}gdd_{season_label}": gdd,
+            f"{prefix}max_dry_streak_{season_label}": max_dry_streak,
+            f"{prefix}rainfall_cv_{season_label}": rainfall_cv,
+            f"{prefix}water_balance_{season_label}": water_balance,
+        }
+    )
