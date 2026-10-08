@@ -128,7 +128,7 @@ def attach_district_id(df: pd.DataFrame, ids: dict, source: str) -> pd.DataFrame
     """Add district_id, applying spelling aliases; drop and report unknown districts."""
     names = [ALIASES.get((s, d), d) for s, d in zip(df["state"], df["district"], strict=True)]
     found = [ids.get((s, n)) for s, n in zip(df["state"], names, strict=True)]
-    df = df.assign(district_id=found)
+    df = pd.concat([df, pd.Series(found, index=df.index, name="district_id")], axis=1)
     unknown = df[df["district_id"].isna()]
     if len(unknown):
         pairs = sorted(set(zip(unknown["state"], unknown["district"], strict=True)))

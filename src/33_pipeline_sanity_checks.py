@@ -31,16 +31,37 @@ from datetime import date
 
 FAILURES = []
 WARNINGS = []
+RESULTS = []  # structured record of every check line, written to JSON at the end
+CURRENT_CHECK = {"name": "setup"}
+REPORT_PATH = 'data/processed/sanity_report.json'
+
+
+def write_report():
+    import datetime as _datetime
+    os.makedirs(os.path.dirname(REPORT_PATH), exist_ok=True)
+    report = {
+        "generated_at": _datetime.datetime.now().isoformat(timespec="seconds"),
+        "passed": not FAILURES,
+        "failures": len(FAILURES),
+        "warnings": len(WARNINGS),
+        "results": RESULTS,
+    }
+    with open(REPORT_PATH, 'w', encoding='utf-8') as f:
+        json.dump(report, f, indent=2)
+    print(f"  Structured report written to {REPORT_PATH}")
 
 def fail(msg):
     FAILURES.append(msg)
+    RESULTS.append({"check": CURRENT_CHECK["name"], "status": "fail", "detail": msg})
     print(f"  [FAIL] {msg}")
 
 def warn(msg):
     WARNINGS.append(msg)
+    RESULTS.append({"check": CURRENT_CHECK["name"], "status": "warn", "detail": msg})
     print(f"  [WARN] {msg}")
 
 def ok(msg):
+    RESULTS.append({"check": CURRENT_CHECK["name"], "status": "pass", "detail": msg})
     print(f"  [OK]   {msg}")
 
 # ---------------------------------------------------------------
@@ -83,12 +104,15 @@ def fail_or_override(check_id, msg):
         warn(f"{msg}\n         >>> OVERRIDDEN (expires {override['expires']}): {override['reason']}\n"
              f"         >>> Caveat: {override.get('caveat', 'none stated')}\n"
              f"         >>> Evidence: {override.get('evidence', 'none stated')}")
+        RESULTS[-1]["status"] = "overridden"
+        RESULTS[-1]["override_ref"] = f"{check_id} (expires {override['expires']})"
     else:
         fail(msg)
 
 
 print("=" * 60)
 print("CHECK 1: Model / feature-list schema consistency")
+CURRENT_CHECK["name"] = "schema_consistency"
 print("=" * 60)
 # Catches bug #2 (stale quantile models): any model file whose
 # feature_names don't EXACTLY match the current feature_list_v2.txt
@@ -133,6 +157,7 @@ for fname, label in model_files.items():
 
 print("\n" + "=" * 60)
 print("CHECK 2: Classification diversity (catches the Kharif-bug shape)")
+CURRENT_CHECK["name"] = "classification_diversity"
 print("=" * 60)
 # Catches bug #1: any time a categorical risk/alert output has
 # >85% of rows in a SINGLE bucket, that's either a genuinely
@@ -257,6 +282,7 @@ for path, col, label, magnitude_col in DIVERSITY_CHECKS:
 
 print("\n" + "=" * 60)
 print("CHECK 3: Live feature values within historical plausible range")
+CURRENT_CHECK["name"] = "feature_ranges"
 print("=" * 60)
 # Catches the general class of "live data pipeline silently broke"
 # (e.g. a future fill-value bug, a bad NASA POWER pull, a unit
@@ -301,6 +327,7 @@ else:
 
 print("\n" + "=" * 60)
 print("CHECK 4: Required output files present and non-empty")
+CURRENT_CHECK["name"] = "output_files_present"
 print("=" * 60)
 
 REQUIRED_FILES = [
@@ -322,6 +349,7 @@ for path in REQUIRED_FILES:
 
 print("\n" + "=" * 60)
 print("CHECK 5: Per-district weather fetch completeness")
+CURRENT_CHECK["name"] = "weather_fetch_completeness"
 print("=" * 60)
 # BUG FIX (2026-07-11): a single-district NASA POWER timeout (Karnal, this date)
 # silently produced zero 2026 weather rows for that district only. Nothing failed
@@ -352,6 +380,7 @@ print("\n" + "=" * 60)
 print("SUMMARY")
 print("=" * 60)
 print(f"  {len(FAILURES)} failure(s), {len(WARNINGS)} warning(s)")
+write_report()
 if FAILURES:
     print("\n  FAILED CHECKS:")
     for f in FAILURES:
