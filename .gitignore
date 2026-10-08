@@ -67,3 +67,5 @@ desktop.ini
 
 # ---- Large plots/outputs you regenerate, not author by hand (optional - comment out if you want these tracked) ----
 # outputs/plots/*.png
+
+data/processed/sanity_report.json
