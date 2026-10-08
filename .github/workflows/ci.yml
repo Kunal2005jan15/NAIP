@@ -22,9 +22,9 @@ jobs:
           python-version: "3.10"
       - run: pip install ruff
       - name: Lint (new code only)
-        run: ruff check pipeline tests/test_weather_features.py
+        run: ruff check pipeline tests/test_weather_features.py tests/test_seed_reference.py
       - name: Format check (new code only)
-        run: ruff format --check pipeline tests/test_weather_features.py
+        run: ruff format --check pipeline tests/test_weather_features.py tests/test_seed_reference.py
       - name: Syntax check (all code)
         run: python -m compileall -q src api dashboard pipeline tests
 
