@@ -7,6 +7,17 @@ allow-lists below via envelope.resolve_sort - never from client input directly.
 from psycopg.rows import dict_row
 
 DISTRICT_SORTS = {"state": "state", "district": "name"}
+# Vocabularies written by src/28_district_watch.py and src/32_kharif_early_warning.py,
+# listed from most to least urgent. They validate filters and drive the SQL ranking below.
+WATCH_LEVELS = ("urgent", "watch", "new", "elevated_stable", "minor_change", "stable", "baseline")
+KHARIF_LEVELS = ("high", "moderate", "low", "insufficient_data")
+_WATCH_RANK = (
+    "CASE w.alert_level WHEN 'urgent' THEN 0 WHEN 'watch' THEN 1 WHEN 'new' THEN 2 "
+    "WHEN 'elevated_stable' THEN 3 WHEN 'minor_change' THEN 4 WHEN 'stable' THEN 5 ELSE 6 END"
+)
+_KHARIF_RANK = (
+    "CASE k.risk_level WHEN 'high' THEN 0 WHEN 'moderate' THEN 1 WHEN 'low' THEN 2 ELSE 3 END"
+)
 PREDICTION_SORTS = {
     "pred_yield": "p.pred_yield",
     "pred_lower": "p.pred_lower",
@@ -190,3 +201,133 @@ def shape_prediction(row: dict, detail: bool = False) -> dict:
             None if lower is None or upper is None else _round(upper - lower, 1)
         )
     return out
+
+
+# ---------- district watch ----------
+_WATCH_FROM = """
+FROM watch_events w
+JOIN districts d USING (district_id)
+LEFT JOIN predictions p
+  ON p.run_id = w.run_id AND p.district_id = w.district_id AND p.crop = w.crop
+"""
+_WATCH_COLUMNS = """
+SELECT d.state, d.name AS district, d.slug, w.crop, w.alert_level, w.change_note,
+       w.yield_change, w.rai_change, w.severity_change, p.pred_yield
+"""
+
+
+def list_watch(conn, run_id, level, crop, state_slug, limit, offset):
+    conditions, params = ["w.run_id = %(run_id)s"], {"run_id": run_id}
+    if level:
+        conditions.append("w.alert_level = %(level)s")
+        params["level"] = level
+    if crop:
+        conditions.append("w.crop = %(crop)s")
+        params["crop"] = crop
+    if state_slug:
+        conditions.append("d.slug LIKE %(like)s")
+        params["like"] = f"{state_slug}/%"
+    where = "WHERE " + " AND ".join(conditions)
+    total = _one(conn, f"SELECT count(*) AS n {_WATCH_FROM} {where}", params)["n"]
+    rows = _rows(
+        conn,
+        f"{_WATCH_COLUMNS} {_WATCH_FROM} {where} "
+        f"ORDER BY {_WATCH_RANK}, abs(coalesce(w.yield_change, 0)) DESC, d.slug, w.crop "
+        "LIMIT %(limit)s OFFSET %(offset)s",
+        {**params, "limit": limit, "offset": offset},
+    )
+    return rows, total
+
+
+def watch_counts(conn, run_id) -> dict:
+    rows = _rows(
+        conn,
+        "SELECT alert_level, count(*) AS n FROM watch_events "
+        "WHERE run_id = %(run_id)s GROUP BY alert_level",
+        {"run_id": run_id},
+    )
+    return {r["alert_level"]: r["n"] for r in rows}
+
+
+def shape_watch(row: dict) -> dict:
+    return {
+        "state": row["state"],
+        "district": row["district"],
+        "slug": row["slug"],
+        "crop": row["crop"],
+        "alert_level": row["alert_level"],
+        "change_note": row["change_note"],
+        "pred_yield_kg_ha": _round(row["pred_yield"], 1),
+        "yield_change_kg_ha": _round(row["yield_change"], 1),
+        "rai_change": _round(row["rai_change"], 2),
+        "severity_change": _round(row["severity_change"], 2),
+    }
+
+
+# ---------- kharif early warning ----------
+_KHARIF_FROM = "FROM kharif_risk k JOIN districts d USING (district_id)"
+_KHARIF_COLUMNS = """
+SELECT d.state, d.name AS district, d.slug, k.partial_rainfall_mm, k.days_elapsed,
+       k.hist_mean, k.hist_std, k.n_years, k.zscore, k.risk_level, k.explanation
+"""
+
+
+def list_kharif(conn, run_id, level, state_slug, limit, offset):
+    conditions, params = ["k.run_id = %(run_id)s"], {"run_id": run_id}
+    if level:
+        conditions.append("k.risk_level = %(level)s")
+        params["level"] = level
+    if state_slug:
+        conditions.append("d.slug LIKE %(like)s")
+        params["like"] = f"{state_slug}/%"
+    where = "WHERE " + " AND ".join(conditions)
+    total = _one(conn, f"SELECT count(*) AS n {_KHARIF_FROM} {where}", params)["n"]
+    rows = _rows(
+        conn,
+        f"{_KHARIF_COLUMNS} {_KHARIF_FROM} {where} "
+        f"ORDER BY {_KHARIF_RANK}, k.zscore ASC NULLS LAST, d.slug "
+        "LIMIT %(limit)s OFFSET %(offset)s",
+        {**params, "limit": limit, "offset": offset},
+    )
+    return rows, total
+
+
+def get_kharif(conn, run_id, slug: str):
+    return _one(
+        conn,
+        f"{_KHARIF_COLUMNS} {_KHARIF_FROM} WHERE k.run_id = %(run_id)s AND d.slug = %(slug)s",
+        {"run_id": run_id, "slug": slug},
+    )
+
+
+def kharif_counts(conn, run_id) -> dict:
+    rows = _rows(
+        conn,
+        "SELECT risk_level, count(*) AS n FROM kharif_risk "
+        "WHERE run_id = %(run_id)s GROUP BY risk_level",
+        {"run_id": run_id},
+    )
+    return {r["risk_level"]: r["n"] for r in rows}
+
+
+def shape_kharif(row: dict) -> dict:
+    partial, mean = row["partial_rainfall_mm"], row["hist_mean"]
+    # same-calendar-window comparison: the baseline is the historical rainfall for the
+    # same days of the season, never a full-season total (see README bug #3)
+    vs_normal = None
+    if partial is not None and mean is not None and mean > 0:
+        vs_normal = _round((partial - mean) / mean * 100, 1)
+    return {
+        "state": row["state"],
+        "district": row["district"],
+        "slug": row["slug"],
+        "risk_level": row["risk_level"],
+        "zscore": _round(row["zscore"], 2),
+        "partial_rainfall_mm": _round(partial, 1),
+        "days_elapsed": row["days_elapsed"],
+        "hist_mean_mm": _round(mean, 1),
+        "hist_std_mm": _round(row["hist_std"], 1),
+        "n_years": row["n_years"],
+        "rainfall_vs_normal_pct": vs_normal,
+        "explanation": row["explanation"],
+    }
