@@ -1045,6 +1045,21 @@ if current_preds is not None:
     current_preds['pred_lower_2026'] = xgb_lower_model.predict(X_current_all)
     current_preds['pred_upper_2026'] = xgb_upper_model.predict(X_current_all)
 
+
+@st.cache_data
+def load_current_rice_predictions():
+    path = 'data/processed/current_rice_predictions_full.csv'
+    if os.path.exists(path):
+        return pd.read_csv(path)
+    return None
+
+current_rice = load_current_rice_predictions()
+if current_rice is not None:
+    X_rice_all = current_rice[FEATURES].astype(float)
+    current_rice['pred_lower_2026'] = xgb_lower_model.predict(X_rice_all)
+    current_rice['pred_upper_2026'] = xgb_upper_model.predict(X_rice_all)
+
+
 # Official IMD 2026 Southwest Monsoon outlook - verified live via RAG
 # (script 31), reported as context wherever Kharif risk is discussed.
 # A NATIONAL figure (district-level IMD sub-forecasts aren't available
@@ -1381,7 +1396,7 @@ with tab_hist:
 
         map_data = test_preds[test_preds['crop'] == crop_filter].dropna(subset=['lat', 'lon'])
 
-        m = folium.Map(location=[28.5, 78.0], zoom_start=6, tiles='CartoDB positron')
+        m = folium.Map(location=[28.5, 78.0], zoom_start=6, tiles='https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', attr='Tiles &copy; Esri')
 
         def get_color(row):
             if row.get('drought_flag', 0) == 1: return '#A33B2E'
@@ -1453,35 +1468,60 @@ with tab_hist:
             empty_state("🌾", "Click any district marker on the map<br>to see its yield prediction and explanation.")
 
 # =================================================================
-# TAB 3 — CURRENT SEASON OUTLOOK (real 2026 weather, real interval)
+# TAB 3 — LATEST SEASON ESTIMATE (Rice Kharif 2026 / Wheat Rabi 2025-26)
 # =================================================================
 
 with tab_current:
 
-    if current_preds is None:
-        empty_state("🌤️", "Current-season predictions have not been generated yet.<br>Run <code>src/27_generate_current_predictions.py</code> first.")
+    crop_options = []
+    if current_rice is not None:
+        crop_options.append("Rice — Kharif 2026")
+    if current_preds is not None:
+        crop_options.append("Wheat — Rabi 2025–26")
+
+    if not crop_options:
+        empty_state("🌤️", "Current-season predictions have not been generated yet.<br>Run <code>src/27_generate_current_predictions.py</code> and <code>src/44_generate_current_rice_predictions.py</code> first.")
     else:
+        crop_choice = st.radio("Crop", crop_options, horizontal=True, key="cur_crop_choice",
+                               label_visibility="collapsed")
+        is_rice = crop_choice.startswith("Rice")
+
+        if is_rice:
+            cp = current_rice
+            crop_name = "Rice"
+            season_txt = "Kharif 2026"
+            window_txt = "June–October 2026"
+            rain_txt = "Kharif"
+        else:
+            cp = current_preds
+            crop_name = "Wheat"
+            season_txt = "Rabi 2025–26"
+            window_txt = "November 2025 – March 2026"
+            rain_txt = "Rabi"
+
+        base_year = int(cp['baseline_yield_year'].iloc[0])
+        as_of = cp['weather_data_as_of'].iloc[0]
+
         st.markdown(f"""
             <div class="naip-mode-banner">
-                Uses REAL current weather (NASA POWER, through {current_preds['weather_data_as_of'].iloc[0]}) for the
-                just-completed Rabi 2025&ndash;26 season, combined with each district's most recently published yield
-                data ({int(current_preds['baseline_yield_year'].iloc[0])} &mdash; government yield statistics publish
-                1&ndash;2 years behind real time). <b>Weather signal is live; the yield-trend baseline is the latest
-                published figure, not live.</b> Rice/Kharif 2026 outlook will be available once the monsoon season
-                completes (around October 2026).
+                <b>Early estimate of the {season_txt} {crop_name.lower()} harvest.</b> The season has finished,
+                but official yield figures are not published yet (government statistics arrive 1&ndash;2 years late).
+                ANNA estimates it now from live satellite and weather data &mdash; real NASA POWER weather for
+                {window_txt} (data through {as_of}){" and live MODIS vegetation (NDVI)" if is_rice else ""} &mdash;
+                combined with each district's last published yield ({base_year}).
+                <b>The weather signal is live; the yield-trend baseline is the latest published figure, not live.</b>
             </div>
         """, unsafe_allow_html=True)
 
-        n_drought = current_preds['drought_flag'].sum()
-        n_flood = current_preds['flood_flag'].sum()
-        mean_change = current_preds['change_vs_2019'].mean()
+        n_drought = int(cp['drought_flag'].sum())
+        mean_change = cp['change_vs_2019'].mean()
 
         cstat_cols = st.columns(4)
         cstats = [
-            (f"{len(current_preds)}", "Districts Assessed", "Wheat, current season"),
-            (f"{current_preds['current_pred_yield'].mean():,.0f}", "Mean Predicted Yield (kg/ha)", "2026 outlook"),
-            (f"{n_drought}", "Drought-Flagged Districts", "Below-normal Rabi rainfall"),
-            (f"{mean_change:+.0f}", "Avg. Change vs 2019 (kg/ha)", "Directional trend signal"),
+            (f"{len(cp)}", "Districts Assessed", f"{crop_name}, {season_txt}"),
+            (f"{cp['current_pred_yield'].mean():,.0f}", "Mean Estimated Yield (kg/ha)", f"{season_txt} estimate"),
+            (f"{n_drought}", "Drought-Flagged Districts", f"Below-normal {rain_txt} rainfall"),
+            (f"{mean_change:+.0f}", f"Avg. Change vs {base_year} (kg/ha)", "vs last published yield"),
         ]
         for col, (num, label, sub) in zip(cstat_cols, cstats):
             col.markdown(f"""
@@ -1497,32 +1537,39 @@ with tab_current:
         cmap_col, cpanel_col = st.columns([1.6, 1])
 
         with cmap_col:
-            st.markdown('<div class="naip-eyebrow">2026 Outlook Map</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="naip-eyebrow">{season_txt} Estimate Map</div>', unsafe_allow_html=True)
 
             render_legend([
                 ("#A33B2E", "Drought flagged"),
                 ("#3D6B5C", "Flood flagged"),
-                ("#8B5A2B", "Trending up vs. 2019"),
-                ("#E8C468", "Trending down vs. 2019"),
+                ("#8B5A2B", f"Higher than {base_year}"),
+                ("#E8C468", f"Lower than {base_year}"),
             ])
 
-            cm = folium.Map(location=[28.5, 78.0], zoom_start=6, tiles='CartoDB positron')
+            cm = folium.Map(location=[28.5, 78.0], zoom_start=6, tiles='https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', attr='Tiles &copy; Esri')
 
             def get_color_current(r):
                 if r.get('drought_flag', 0) == 1: return '#A33B2E'
                 if r.get('flood_flag', 0) == 1: return '#3D6B5C'
                 return '#8B5A2B' if r['change_vs_2019'] > 0 else '#E8C468'
 
-            for _, r in current_preds.dropna(subset=['lat', 'lon']).iterrows():
+            pts = cp.dropna(subset=['lat', 'lon'])
+            for _, r in pts.iterrows():
                 folium.CircleMarker(
                     location=[r['lat'], r['lon']], radius=7, tooltip=r['district'],
-                    popup=f"<b>{r['district']}</b><br>2026 outlook: {r['current_pred_yield']:.0f} kg/ha "
-                          f"({r['pred_lower_2026']:.0f}&ndash;{r['pred_upper_2026']:.0f})<br>vs 2019: {r['change_vs_2019']:+.0f}",
+                    popup=f"<b>{r['district']}</b><br>{season_txt} estimate: {r['current_pred_yield']:.0f} kg/ha "
+                          f"({r['pred_lower_2026']:.0f}&ndash;{r['pred_upper_2026']:.0f})<br>vs {base_year}: {r['change_vs_2019']:+.0f}",
                     color='#2B2417', weight=1, fill=True, fill_color=get_color_current(r), fill_opacity=0.85,
                 ).add_to(cm)
 
-            current_map_output = st_folium(cm, width=None, height=480, key="current_map", returned_objects=["last_object_clicked_tooltip"])
-            st.caption("Click any marker to view its 2026 outlook, explanation, and recommended actions.")
+            # Zoom to the districts so neighbouring countries' labels stay out of frame
+            if len(pts) > 0:
+                cm.fit_bounds([[pts['lat'].min(), pts['lon'].min()],
+                               [pts['lat'].max(), pts['lon'].max()]])
+
+            current_map_output = st_folium(cm, width=None, height=480, key=f"current_map_{crop_name}",
+                                           returned_objects=["last_object_clicked_tooltip"])
+            st.caption(f"Click any marker to view its {season_txt} estimate, explanation, and recommended actions.")
 
         with cpanel_col:
             selected_current_district = None
@@ -1530,7 +1577,7 @@ with tab_current:
                 selected_current_district = current_map_output["last_object_clicked_tooltip"]
 
             if selected_current_district:
-                crow_match = current_preds[current_preds['district'] == selected_current_district]
+                crow_match = cp[cp['district'] == selected_current_district]
                 if len(crow_match) > 0:
                     crow = crow_match.iloc[0]
 
@@ -1540,29 +1587,26 @@ with tab_current:
                     """, unsafe_allow_html=True)
                     st.markdown('<div class="naip-divider"></div>', unsafe_allow_html=True)
 
-                    # Uses the district's REAL calibrated 80% interval instead
-                    # of a fabricated +/-15% band, so the interval-width-based
-                    # "verify before acting" flag reflects genuine uncertainty.
                     render_advisory(generate_advisory(
                         crow, crow['pred_lower_2026'], crow['pred_upper_2026'], crow['current_pred_yield']
                     ))
 
                     alert_type_2 = 'drought' if crow.get('drought_flag', 0) == 1 else 'flood' if crow.get('flood_flag', 0) == 1 else 'general'
-                    render_live_context(crow['state'], crow['district'], 'Wheat', alert_type_2)
+                    render_live_context(crow['state'], crow['district'], crop_name, alert_type_2)
 
                     st.markdown(f"""
                         <div class="naip-card">
                             <div class="naip-stat-number">{crow['current_pred_yield']:,.0f} <span style="font-size:1rem; color:var(--soil); font-weight:500;">kg/ha</span></div>
-                            <div class="naip-stat-label">2026 Wheat Outlook</div>
+                            <div class="naip-stat-label">{season_txt} {crop_name} Estimate</div>
                             <div class="naip-stat-sub">80% prediction interval: {crow['pred_lower_2026']:,.0f} &ndash; {crow['pred_upper_2026']:,.0f} kg/ha</div>
-                            <div class="naip-stat-sub" style="color: var(--soil);">vs. 2019 actual: {crow['change_vs_2019']:+,.0f} kg/ha</div>
+                            <div class="naip-stat-sub" style="color: var(--soil);">vs. {base_year} actual: {crow['change_vs_2019']:+,.0f} kg/ha</div>
                         </div>
                     """, unsafe_allow_html=True)
-                    st.caption(f"In plain terms: based on the model's track record, this district's actual 2026 wheat "
-                               f"yield is more likely than not to fall between {crow['pred_lower_2026']:,.0f} and "
-                               f"{crow['pred_upper_2026']:,.0f} kg/ha &mdash; a real calibrated range, not a single guess.")
+                    st.caption(f"In plain terms: based on the model's track record, this district's actual {season_txt} {crop_name.lower()} "
+                               f"yield is likely to fall between {crow['pred_lower_2026']:,.0f} and "
+                               f"{crow['pred_upper_2026']:,.0f} kg/ha &mdash; a calibrated range, not a single guess.")
 
-                    st.markdown('<div class="naip-eyebrow">Why this outlook</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="naip-eyebrow">Why this estimate</div>', unsafe_allow_html=True)
                     shap_cols = [c for c in crow.index if c.startswith('shap_')]
                     shap_df_c = pd.DataFrame({
                         'feature': [c.replace('shap_', '') for c in shap_cols],
@@ -1574,7 +1618,8 @@ with tab_current:
                 else:
                     empty_state("🌾", "No data available for this district.")
             else:
-                empty_state("🌤️", "Click any district marker to see its<br>2026 wheat outlook and explanation.")
+                empty_state("🌤️", f"Click any district marker to see its<br>{season_txt} {crop_name.lower()} estimate and explanation.")
+
 
 # =================================================================
 # TAB 5 — SCENARIO EXPLORER (Advanced / Testing — demoted)
