@@ -4,7 +4,7 @@ Usage: python -m pipeline.db.write_run [writer|owner]
 
 Run it after the refresh (src/00_run_full_refresh.py, which ends with the
 sanity gate in src/33). It reads the files the refresh produced, computes the
-80% prediction interval with the serving quantile models, and follows
+prediction band (quantiles 0.02 and 0.98) with the serving quantile models, and follows
 docs/database.md section 8:
 
   1. insert a runs row with status 'running'
