@@ -7,7 +7,7 @@ import psycopg
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 
-from api.app import repository
+from api.app import grounding, repository
 from api.app.deps import get_conn
 from api.app.envelope import (
     CACHE_CONTROL,
@@ -19,6 +19,7 @@ from api.app.envelope import (
     etag_for,
     etag_matches,
     iso,
+    normalise_choice,
     normalise_crop,
     ok,
     page_info,
@@ -42,7 +43,9 @@ LIMITATIONS = [
     "Live predictions combine current weather with the most recent published yield year "
     "(see meta.baseline_yield_year); government yield statistics lag by 1-2 years.",
     "The prediction band comes from separate quantile models; the point estimate can fall "
-    "outside it (see contains_point).",
+    "outside it (see contains_point)."
+    "Kharif risk is a rainfall-based early-warning flag, not a yield forecast.",
+    "Web context (/context) is retrieved live from external sources and is not model output.",
 ]
 
 
@@ -74,6 +77,16 @@ def cached_json(request: Request, run: dict, payload: dict) -> Response:
 
 def district_slug(state: str, district: str) -> str:
     return f"{slugify(state)}/{slugify(district)}"
+
+
+def kharif_notice(run: dict) -> str | None:
+    as_of = run["weather_data_as_of"]
+    if as_of is not None and not 6 <= as_of.month <= 10:
+        return (
+            "Kharif early warning covers the June to October monsoon season; "
+            "data from outside that window may be out of date."
+        )
+    return None
 
 
 # ---------------------------------------------------------------- system
@@ -191,3 +204,122 @@ def district_prediction(
         )
     body = ok(repository.shape_prediction(row, detail=True), meta=meta_for(conn, run))
     return cached_json(request, run, body)
+
+
+# ---------------------------------------------------------------- alerts
+@router.get("/watch")
+def watch(
+    request: Request,
+    conn: Conn,
+    alert_level: str | None = None,
+    crop: str | None = None,
+    state: str | None = None,
+    limit: Limit = DEFAULT_LIMIT,
+    offset: Offset = 0,
+):
+    level = normalise_choice(
+        alert_level, repository.WATCH_LEVELS, "INVALID_ALERT_LEVEL", "alert level"
+    )
+    crop_name = normalise_crop(crop)
+    run = require_run(conn)
+    rows, total = repository.list_watch(
+        conn,
+        run["run_id"],
+        level,
+        crop_name,
+        slugify(state) if state else None,
+        limit,
+        offset,
+    )
+    meta_block = meta_for(conn, run)
+    meta_block["counts_by_level"] = repository.watch_counts(conn, run["run_id"])
+    data = [repository.shape_watch(r) for r in rows]
+    body = ok(data, meta=meta_block, page=page_info(limit, offset, total))
+    return cached_json(request, run, body)
+
+
+@router.get("/kharif-risk")
+def kharif_risk(
+    request: Request,
+    conn: Conn,
+    risk_level: str | None = None,
+    state: str | None = None,
+    limit: Limit = DEFAULT_LIMIT,
+    offset: Offset = 0,
+):
+    level = normalise_choice(
+        risk_level, repository.KHARIF_LEVELS, "INVALID_RISK_LEVEL", "risk level"
+    )
+    run = require_run(conn)
+    rows, total = repository.list_kharif(
+        conn, run["run_id"], level, slugify(state) if state else None, limit, offset
+    )
+    meta_block = meta_for(conn, run)
+    meta_block["counts_by_level"] = repository.kharif_counts(conn, run["run_id"])
+    notice = kharif_notice(run)
+    if notice:
+        meta_block["notice"] = notice
+    data = [repository.shape_kharif(r) for r in rows]
+    body = ok(data, meta=meta_block, page=page_info(limit, offset, total))
+    return cached_json(request, run, body)
+
+
+@router.get("/districts/{state}/{district}/kharif")
+def district_kharif(request: Request, state: str, district: str, conn: Conn):
+    slug = district_slug(state, district)
+    if repository.get_district(conn, slug) is None:
+        raise ApiError(404, "DISTRICT_NOT_FOUND", f"No district '{slug}'.", {"slug": slug})
+    run = require_run(conn)
+    row = repository.get_kharif(conn, run["run_id"], slug)
+    if row is None:
+        raise ApiError(
+            404,
+            "NO_KHARIF_RISK",
+            f"No Kharif risk for '{slug}' in the latest run.",
+            {"slug": slug},
+        )
+    meta_block = meta_for(conn, run)
+    notice = kharif_notice(run)
+    if notice:
+        meta_block["notice"] = notice
+    return cached_json(request, run, ok(repository.shape_kharif(row), meta=meta_block))
+
+
+# ---------------------------------------------------------------- web context (RAG)
+def derived_alert_type(conn, run: dict | None, slug: str, crop_name: str) -> str:
+    """Pick drought/flood from the district's live flags; fall back to general."""
+    if run is None:
+        return "general"
+    row = repository.get_prediction(conn, run["run_id"], slug, crop_name)
+    if row is None:
+        return "general"
+    if row["drought_flag"]:
+        return "drought"
+    if row["flood_flag"]:
+        return "flood"
+    return "general"
+
+
+@router.get("/districts/{state}/{district}/context")
+def district_context(
+    state: str,
+    district: str,
+    conn: Conn,
+    crop: str = "Wheat",
+    alert_type: str | None = None,
+):
+    """Cited web context (relief schemes, MSP, IMD outlook). Optional; never an error."""
+    crop_name = normalise_crop(crop)
+    kind = normalise_choice(alert_type, grounding.ALERT_TYPES, "INVALID_ALERT_TYPE", "alert type")
+    slug = district_slug(state, district)
+    row = repository.get_district(conn, slug)
+    if row is None:
+        raise ApiError(404, "DISTRICT_NOT_FOUND", f"No district '{slug}'.", {"slug": slug})
+    if kind is None:
+        kind = derived_alert_type(conn, repository.latest_run(conn), slug, crop_name)
+    # state and district come from the database row, never from the URL text
+    data = grounding.get_context(row["state"], row["district"], crop_name, kind)
+    data["district"] = {"state": row["state"], "district": row["district"], "slug": slug}
+    data["crop"] = crop_name
+    data["alert_type"] = kind
+    return JSONResponse(ok(data), headers={"Cache-Control": "private, max-age=900"})

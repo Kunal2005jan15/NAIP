@@ -92,6 +92,16 @@ def normalise_crop(crop: str | None) -> str | None:
     return value
 
 
+def normalise_choice(value: str | None, allowed: tuple, code: str, label: str) -> str | None:
+    """Validate a filter value against a fixed list; the match is case-insensitive."""
+    if value is None:
+        return None
+    key = value.strip().lower()
+    if key not in allowed:
+        raise ApiError(400, code, f"Unknown {label} '{value}'.", {"allowed": list(allowed)})
+    return key
+
+
 def etag_for(run_id, path_and_query: str) -> str:
     digest = hashlib.sha1(f"{run_id}|{path_and_query}".encode()).hexdigest()[:16]
     return f'W/"{digest}"'
