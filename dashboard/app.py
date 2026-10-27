@@ -1381,7 +1381,7 @@ with tab_hist:
 
         map_data = test_preds[test_preds['crop'] == crop_filter].dropna(subset=['lat', 'lon'])
 
-        m = folium.Map(location=[28.5, 78.0], zoom_start=6, tiles='CartoDB positron')
+        m = folium.Map(location=[28.5, 78.0], zoom_start=6, tiles='OpenStreetMap')
 
         def get_color(row):
             if row.get('drought_flag', 0) == 1: return '#A33B2E'
@@ -1506,7 +1506,7 @@ with tab_current:
                 ("#E8C468", "Trending down vs. 2019"),
             ])
 
-            cm = folium.Map(location=[28.5, 78.0], zoom_start=6, tiles='CartoDB positron')
+            cm = folium.Map(location=[28.5, 78.0], zoom_start=6, tiles='OpenStreetMap')
 
             def get_color_current(r):
                 if r.get('drought_flag', 0) == 1: return '#A33B2E'
